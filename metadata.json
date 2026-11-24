@@ -1,0 +1,10 @@
+{
+  "name": "Kiki bilan so‘zla",
+  "description": "6–12 yoshli bolalar uchun sun’iy intellekt asosidagi o‘yinlashtirilgan nutq rivojlantirish va talaffuz mashqlari ekotizimi.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

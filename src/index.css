@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Fredoka', 'Nunito', system-ui, sans-serif;
+    --font-body: 'Nunito', system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: #ffffff;
+    color: #1e293b;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+/* Tactile 3D Button System */
+.btn-3d {
+  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1),
+    border-bottom-width 0.1s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.15s ease;
+  border-bottom-style: solid;
+  border-bottom-width: 5px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-3d:active:not(:disabled) {
+  transform: translateY(4px);
+  border-bottom-width: 1px;
+  margin-bottom: 4px;
+}
+
+.btn-3d:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.node-3d {
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1),
+    border-bottom-width 0.12s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.15s ease;
+  border-bottom-style: solid;
+  border-bottom-width: 6px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.node-3d:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.node-3d:active:not(:disabled) {
+  transform: translateY(4px);
+  border-bottom-width: 2px;
+}
+
+/* Kiki Mascot Animations */
+@keyframes kikiFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes kikiHappy {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-6px) rotate(-2.5deg);
+  }
+  50% {
+    transform: translateY(-1px) rotate(0deg);
+  }
+  75% {
+    transform: translateY(-5px) rotate(2.5deg);
+  }
+}
+
+@keyframes kikiEncourage {
+  0%, 100% {
+    transform: rotate(0deg) translateX(0px);
+  }
+  30% {
+    transform: rotate(-5deg) translateX(-3px);
+  }
+  70% {
+    transform: rotate(4deg) translateX(3px);
+  }
+}
+
+@keyframes kikiListen {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-2deg);
+  }
+}
+
+@keyframes tooltipBounce {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-kiki-idle {
+  animation: kikiFloat 3.4s ease-in-out infinite;
+}
+
+.animate-kiki-happy {
+  animation: kikiHappy 0.9s ease-in-out infinite;
+}
+
+.animate-kiki-retry {
+  animation: kikiEncourage 1.2s ease-in-out 2;
+}
+
+.animate-kiki-listen {
+  animation: kikiListen 1.1s ease-in-out infinite;
+}
+
+.animate-tooltip-bounce {
+  animation: tooltipBounce 1.6s ease-in-out infinite;
+}
+
+/* Dyslexia & Autism Inclusive Mode */
+.inclusive-mode {
+  letter-spacing: 0.025em;
+  line-height: 1.75;
+}
+
+.inclusive-mode * {
+  animation-duration: 0.01ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-kiki-idle,
+  .animate-kiki-happy,
+  .animate-kiki-retry,
+  .animate-kiki-listen,
+  .animate-tooltip-bounce {
+    animation: none !important;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+

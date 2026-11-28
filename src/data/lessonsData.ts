@@ -984,4 +984,6 @@ export const DEFAULT_PROFILE: UserProfile = {
   musicEnabled: false,
   sfxEnabled: true,
   inclusiveMode: false,
+  voiceStyle: 'child_boy',
+  theme: 'light',
 };

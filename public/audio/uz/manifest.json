@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "basePath": "/audio/uz",
+  "description": "So‘zApp static Uzbek audio assets manifest. Place native Uzbek .wav or .mp3 recordings under public/audio/uz/{child_boy|child_girl|shared}/{slug}.wav and register them below.",
+  "entries": {
+    "child_boy": {},
+    "child_girl": {},
+    "shared": {}
+  }
+}

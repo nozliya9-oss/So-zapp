@@ -61,40 +61,40 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
       </section>
 
       {/* Clean Leaderboard Card */}
-      <section className="bg-white border-2 border-[#E5E5E5] rounded-3xl p-5 sm:p-6">
+      <section className="bg-white dark:bg-slate-900 border-2 border-[#E5E5E5] dark:border-slate-800 rounded-3xl p-5 sm:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display font-bold text-lg text-slate-900 flex items-center gap-2">
+          <h2 className="font-display font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
             <Crown className="w-5 h-5 text-[#FFC800] fill-[#FFC800]" />
             <span>Ishtirokchilar jadvali</span>
           </h2>
-          <span className="text-xs font-bold text-slate-500">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
             Real foydalanuvchi natijalari
           </span>
         </div>
 
         <div className="space-y-2">
           {/* Current User Row (Top-1) */}
-          <div className="flex items-center justify-between gap-3 py-3.5 px-4 rounded-2xl bg-[#E5F8FF] border-2 border-[#00BFFF]">
+          <div className="flex items-center justify-between gap-3 py-3.5 px-4 rounded-2xl bg-[#E5F8FF] dark:bg-[#00BFFF]/15 border-2 border-[#00BFFF]">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-xl bg-[#FFC800] text-slate-900 flex items-center justify-center font-display font-bold text-sm tabular-nums shrink-0">
                 1
               </div>
 
-              <div className="w-10 h-10 rounded-full bg-[#00BFFF] text-white font-display font-bold text-sm flex items-center justify-center shrink-0 border-2 border-white shadow-xs">
+              <div className="w-10 h-10 rounded-full bg-[#00BFFF] text-white font-display font-bold text-sm flex items-center justify-center shrink-0 border-2 border-white dark:border-slate-800 shadow-xs">
                 {initials}
               </div>
 
               <div className="min-w-0">
-                <div className="font-bold text-sm sm:text-base text-slate-900 truncate">
+                <div className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
                   {fullName} (Siz)
                 </div>
-                <div className="text-xs font-bold text-[#008ECC]">
+                <div className="text-xs font-bold text-[#008ECC] dark:text-[#38BDF8]">
                   Top-1 · {profile.age} yosh · Asosiy tovush: «{profile.focusSound}»
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 font-display font-bold text-lg text-amber-600 tabular-nums shrink-0">
+            <div className="flex items-center gap-1.5 font-display font-bold text-lg text-amber-600 dark:text-[#FFC800] tabular-nums shrink-0">
               <Star className="w-5 h-5 text-[#FFC800] fill-[#FFC800]" />
               <span>{stars}</span>
             </div>
@@ -104,27 +104,27 @@ export const TournamentView: React.FC<TournamentViewProps> = ({
           {emptySlots.map((rank) => (
             <div
               key={rank}
-              className="flex items-center justify-between gap-3 py-3 px-4 rounded-2xl border border-slate-100 bg-slate-50/60"
+              className="flex items-center justify-between gap-3 py-3 px-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/60"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center font-display font-bold text-sm tabular-nums shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 flex items-center justify-center font-display font-bold text-sm tabular-nums shrink-0">
                   {rank}
                 </div>
 
                 <SilhouetteAvatar />
 
                 <div className="min-w-0">
-                  <div className="font-bold text-sm sm:text-base text-slate-400 tracking-wider">
+                  <div className="font-bold text-sm sm:text-base text-slate-400 dark:text-slate-500 tracking-wider">
                     --------
                   </div>
-                  <div className="text-xs font-semibold text-slate-400">
+                  <div className="text-xs font-semibold text-slate-400 dark:text-slate-500">
                     Bo‘sh o‘rin
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 font-display font-bold text-base text-slate-400 tabular-nums shrink-0">
-                <Star className="w-4 h-4 text-slate-300" />
+              <div className="flex items-center gap-1.5 font-display font-bold text-base text-slate-400 dark:text-slate-500 tabular-nums shrink-0">
+                <Star className="w-4 h-4 text-slate-300 dark:text-slate-600" />
                 <span>0</span>
               </div>
             </div>

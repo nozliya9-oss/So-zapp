@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlertCircle,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -32,92 +33,6 @@ const PARENT_SUGGESTIONS = [
   'Disleksiya belgilari bo‘lgan bolalar bilan qanday mashq qilish kerak?',
 ];
 
-function generateClientConversationalFallback(
-  userMessage: string,
-  persona: 'child' | 'parent_therapist'
-): string {
-  const trimmed = userMessage.trim();
-  const lower = trimmed.toLowerCase();
-
-  if (/\b(salom|assalom|assalomu|alaykum|xayrli|hayrli|privet|hello|hi)\b/i.test(lower)) {
-    return persona === 'parent_therapist'
-      ? 'Va alaykum assalom! So‘zApp’ga xush kelibsiz 🐼 Farzandingiz nutq rivoji yoki ilova haqida istalgan savolingizni berishingiz mumkin.'
-      : 'Salom, aziz do‘stim! 🐼 Men Kikiman! Bugun kayfiyating qanday? Istalgan savolingni yoz — birga suhbatlashamiz!';
-  }
-
-  if (/(qalaysan|qandaysan|yaxshimisiz|ishlar|nima gap|ahvoling|tuzukmisiz)/i.test(lower)) {
-    return persona === 'parent_therapist'
-      ? 'Rahmat, hammasi a’lo! Sizga qanday yordam bera olaman?'
-      : 'Menda hammasi a’lo, rahmat! 🐼 Bugun So‘zlar shahrida yangi binolarni ko‘rib chiqyapman. Sening kuning qanday o‘tyapti?';
-  }
-
-  if (/(kimsan|isming|nima qila olasan|so‘zapp|sozapp|ilova|dastur)/i.test(lower)) {
-    return (
-      'Men Kikiman — So‘zApp ilovasining mehribon panda do‘stingman! 🐼\n\n' +
-      'Bu yerda darslar, qiziqarli o‘yinlar, So‘zlar shahridagi 10 ta bino va haftalik turnir bor. Menga istalgan mavzuda savol berishing mumkin!'
-    );
-  }
-
-  if (/(rahmat|raxmat|tashakkur|zo‘r|zor|ajoyib|barakalla|super)/i.test(lower)) {
-    return 'Arzimaydi! 🌟 Sen bilan suhbatlashish juda maroqli. Yana nimani muhokama qilamiz?';
-  }
-
-  if (/(ertak|hikoya|latifa|qiziq|kulgi|topishmoq)/i.test(lower)) {
-    return (
-      'Mana Kikidan qisqa ertak: 🐼✨\n\n' +
-      'Bir kuni ko‘k panda Kiki So‘zlar shahrida oltin kalit topib olibdi. Oltin kalit faqat yaxshi so‘z aytilganda ochilar ekan. ' +
-      'Kiki «Salom, do‘stlar!» degan ekan, barcha eshiklar ochilib, quvnoq musiqa yangrab ketibdi!'
-    );
-  }
-
-  if (/(o‘yin|oyin|shahar|bino|tanga|yulduz|turnir)/i.test(lower)) {
-    return (
-      '«O‘yinlar» bo‘limida 3 ta qiziqarli o‘yin bor, «So‘zlar shahri»da esa har bir ochilgan bino senga +20 tanga beradi! 🎮🪙'
-    );
-  }
-
-  if (/(charchadim|qiyin|zerikdim|xafa|uddalay olmayman)/i.test(lower)) {
-    return (
-      'Hechqisi yo‘q, do‘stim! «Kiki bilan kichik harakat — katta natija» 💙 Biroz dam ol, keyin esa xohlagan o‘yiningni o‘ynaymiz.'
-    );
-  }
-
-  const asksAboutPronunciation =
-    /(tovush|harf|talaffuz|artikul|logoped|bo‘g‘in|mashq)/i.test(lower);
-
-  if (asksAboutPronunciation) {
-    if (/(ruscha|o‘zbekcha|farqi)/i.test(lower)) {
-      return (
-        'O‘zbekcha «R» va ruscha «Р» farqi:\n\n' +
-        '• O‘zbekcha «R» (Arra, Bahor): til uchi 1–2 marta yumshoq tegadi.\n' +
-        '• Ruscha «Р» (Ракета, Рыба): til uchi 3–4 marta kuchliroq titraydi.'
-      );
-    }
-    if (/\bsh\b|«sh»|"sh"|ш/i.test(lower)) {
-      return '«Sh» tovushi uchun lablarni oldinga biroz cho‘zib, til uchini yuqori tishlar orqasiga ko‘taring: QU-YOSH, SHA-MOL, MA-SHI-NA!';
-    }
-    if (/\bch\b|«ch»|"ch"|ч/i.test(lower)) {
-      return '«Ch» tovushi uchun til uchini yuqori tanglayga bosib havoni qisqa oching: CHOY, OL-CHA, CHI-ROQ!';
-    }
-    if (/\bs\b|«s»|"s"|с/i.test(lower)) {
-      return '«S» tovushi uchun yengil tabassum qilib, salqin havo chiqaring: SO-AT, SAB-ZI, OS-MON!';
-    }
-    if (/\bl\b|«l»|"l"|л/i.test(lower)) {
-      return '«L» tovushi uchun til uchini yuqori old tishlarga yumshoq bosing: LO-LA, QA-LAM, OL-MA!';
-    }
-    if (/\b(j|z)\b|«j»|«z»|"j"|"z"/i.test(lower)) {
-      return '«J» va «Z» tovushlarida ovoz paychalari titraydi: JO‘-JA, ZEB-RA, U-ZUM, JI-RA-FA!';
-    }
-    if (/\br\b|«r»|"r"|р/i.test(lower)) {
-      return '«R» tovushi mashqi: avval tez-tez «d-d-d» deng, keyin «dr-r-r» deb titrating: AR-RA, DA-RAXT, BA-RA-BAN!';
-    }
-  }
-
-  return persona === 'parent_therapist'
-    ? `Savolingiz («${trimmed}») uchun rahmat! Har kuni bola bilan iliq muloqot qilish va So‘zApp mashqlarini muntazam bajarish nutq ravonligini oshiradi. Yana qanday savolingiz bor?`
-    : `Juda qiziq savol («${trimmed}»)! 🐼 Men Kikiman — sen bilan maktab, sevimli mashg‘ulotlar, ertaklar yoki istagan mavzungda suhbatlashishga tayyorman. Yana nima haqida gaplashamiz?`;
-}
-
 export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
   const [persona, setPersona] = useState<'child' | 'parent_therapist'>('child');
   const [useSearch, setUseSearch] = useState<boolean>(true);
@@ -125,7 +40,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
   const [showMobileControls, setShowMobileControls] = useState<boolean>(false);
   const [input, setInput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [statusIndicator, setStatusIndicator] = useState<string>('Kiki AI tayyor');
+  const [statusIndicator, setStatusIndicator] = useState<string>('Gemini AI tayyor');
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -169,7 +84,14 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
       text: trimmed,
     };
 
-    const historyForApi = messages.map((m) => ({ role: m.role, text: m.text }));
+    // Strip leading welcome messages and error bubbles so Gemini receives valid alternating user/model history
+    const cleanHistory = messages
+      .filter((m) => !m.isError)
+      .map((m) => ({ role: m.role, text: m.text }));
+    while (cleanHistory.length > 0 && cleanHistory[0].role !== 'user') {
+      cleanHistory.shift();
+    }
+
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
@@ -180,7 +102,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: trimmed,
-          history: historyForApi,
+          history: cleanHistory,
           persona,
           useSearch,
           fastMode,
@@ -191,7 +113,6 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
       let parsed: {
         reply?: string;
         sources?: ChatSource[];
-        fallback?: boolean;
         statusLabel?: string;
         error?: string;
       } | null = null;
@@ -202,25 +123,27 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
         parsed = null;
       }
 
-      if (!res.ok || !parsed || !parsed.reply) {
-        const fallbackReply = generateClientConversationalFallback(trimmed, persona);
-        setStatusIndicator('Kiki suhbat yordamchisi faol');
+      const replyText = parsed?.reply?.trim();
+      if (!res.ok || !replyText) {
+        const errorText =
+          parsed?.error ||
+          'Gemini AI javob bera olmadi. Iltimos, ulanish va API kalitini tekshirib qayta urinib ko‘ring.';
+        setStatusIndicator('Gemini AI xatosi');
         setMessages((prev) => [
           ...prev,
           {
-            id: `model-fallback-${Date.now()}`,
+            id: `model-error-${Date.now()}`,
             role: 'model',
-            text: fallbackReply,
+            text: errorText,
             sources: [],
-            isFallback: true,
+            isError: true,
           },
         ]);
         return;
       }
 
       setStatusIndicator(
-        parsed.statusLabel ||
-          (parsed.fallback ? 'Kiki suhbat yordamchisi faol' : 'Gemini AI faol')
+        parsed?.statusLabel || (useSearch ? 'Gemini AI + Google Qidiruv' : 'Gemini AI faol')
       );
 
       setMessages((prev) => [
@@ -228,22 +151,20 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
         {
           id: `model-${Date.now()}`,
           role: 'model',
-          text: parsed.reply || generateClientConversationalFallback(trimmed, persona),
-          sources: Array.isArray(parsed.sources) ? parsed.sources : [],
-          isFallback: Boolean(parsed.fallback),
+          text: replyText,
+          sources: Array.isArray(parsed?.sources) ? parsed.sources : [],
         },
       ]);
     } catch {
-      const fallbackReply = generateClientConversationalFallback(trimmed, persona);
-      setStatusIndicator('Kiki suhbat yordamchisi faol');
+      setStatusIndicator('Ulanish xatosi');
       setMessages((prev) => [
         ...prev,
         {
-          id: `model-offline-${Date.now()}`,
+          id: `model-network-error-${Date.now()}`,
           role: 'model',
-          text: fallbackReply,
+          text: 'Server bilan bog‘lanib bo‘lmadi. Iltimos, internetingizni tekshirib qayta urinib ko‘ring.',
           sources: [],
-          isFallback: true,
+          isError: true,
         },
       ]);
     } finally {
@@ -258,6 +179,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
 
   const handleClear = () => {
     playButtonPop(!sfxEnabled);
+    setStatusIndicator('Gemini AI tayyor');
     setMessages([
       {
         id: `reset-${Date.now()}`,
@@ -275,20 +197,22 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
   return (
     <div className="w-full max-w-4xl mx-auto px-2.5 sm:px-6 pt-2.5 sm:pt-4 pb-[64px] lg:pb-4 flex flex-col min-h-[calc(100dvh-64px)] lg:h-[calc(100dvh-68px)] overflow-x-clip">
       {/* Compact Header & Collapsible Controls */}
-      <div className="bg-white border-2 border-[#E5E5E5] rounded-2xl sm:rounded-3xl p-3 sm:p-4 mb-2.5 sm:mb-3 shrink-0">
+      <div className="bg-white dark:bg-slate-800 border-2 border-[#E5E5E5] dark:border-slate-700 rounded-2xl sm:rounded-3xl p-3 sm:p-4 mb-2.5 sm:mb-3 shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <KikiMascot
               mood={isLoading ? 'listening' : 'idle'}
               size="sm"
-              className="!w-10 !h-10 sm:!w-12 sm:!h-12 shrink-0"
+              className="!w-16 !h-16 sm:!w-20 sm:!h-20 shrink-0"
             />
             <div className="min-w-0">
-              <h1 className="font-display font-bold text-base sm:text-xl text-slate-900 truncate">
+              <h1 className="font-display font-bold text-base sm:text-xl text-slate-900 dark:text-white leading-tight">
                 Kiki AI Suhbatdosh
               </h1>
-              <p className="text-[11px] sm:text-xs font-semibold text-slate-500 truncate">
-                <span className="text-[#008ECC] font-bold">{statusIndicator}</span>
+              <p className="text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                <span className="text-[#008ECC] dark:text-[#38BDF8] font-bold">
+                  {statusIndicator}
+                </span>
                 {' · '}
                 <span>{persona === 'child' ? 'Bola rejimi' : 'Ota-ona/Logoped'}</span>
               </p>
@@ -303,7 +227,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
                 setShowMobileControls((prev) => !prev);
               }}
               aria-expanded={showMobileControls}
-              className="sm:hidden btn-3d bg-[#E5F8FF] text-[#008ECC] border-2 border-[#00BFFF] border-b-[4px] border-b-[#008ECC] rounded-xl px-2.5 py-1.5 text-[11px] font-bold flex items-center gap-1 whitespace-nowrap"
+              className="sm:hidden btn-3d bg-[#E5F8FF] dark:bg-slate-700 text-[#008ECC] dark:text-[#38BDF8] border-2 border-[#00BFFF] border-b-[4px] border-b-[#008ECC] rounded-xl px-2.5 py-1.5 text-[11px] font-bold flex items-center gap-1 whitespace-nowrap"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
               <span>Rejim</span>
@@ -319,7 +243,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
               onClick={handleClear}
               title="Suhbatni tozalash"
               aria-label="Suhbatni tozalash"
-              className="btn-3d bg-white hover:bg-slate-50 text-slate-600 border-2 border-[#E5E5E5] border-b-[4px] border-b-slate-300 rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
+              className="btn-3d bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 border-2 border-[#E5E5E5] dark:border-slate-600 border-b-[4px] border-b-slate-300 dark:border-b-slate-900 rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
             >
               <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Suhbatni tozalash</span>
@@ -327,14 +251,14 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
           </div>
         </div>
 
-        {/* Role & Grounding Toggles (Collapsible on mobile, compact row on desktop) */}
+        {/* Role & Grounding Toggles */}
         <div
           className={`${
             showMobileControls ? 'flex' : 'hidden sm:flex'
-          } mt-2.5 pt-2.5 border-t border-slate-100 flex-wrap items-center justify-between gap-2`}
+          } mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-700 flex-wrap items-center justify-between gap-2`}
         >
           <div
-            className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-[#E5E5E5] max-w-full overflow-x-auto no-scrollbar"
+            className="inline-flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-[#E5E5E5] dark:border-slate-700 max-w-full overflow-x-auto no-scrollbar"
             role="group"
             aria-label="Suhbat rolini tanlash"
           >
@@ -344,7 +268,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-all min-h-[32px] ${
                 persona === 'child'
                   ? 'bg-[#00BFFF] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <MessageCircle className="w-3.5 h-3.5" />
@@ -356,7 +280,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-all min-h-[32px] ${
                 persona === 'parent_therapist'
                   ? 'bg-[#00BFFF] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Stethoscope className="w-3.5 h-3.5" />
@@ -373,8 +297,8 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
               }}
               className={`px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold border-2 flex items-center gap-1 min-h-[32px] whitespace-nowrap transition-colors shrink-0 ${
                 useSearch
-                  ? 'bg-emerald-50 border-[#58CC02] text-[#3B8700]'
-                  : 'bg-white border-[#E5E5E5] text-slate-500'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 border-[#58CC02] text-[#3B8700] dark:text-[#7CE82B]'
+                  : 'bg-white dark:bg-slate-700 border-[#E5E5E5] dark:border-slate-600 text-slate-500 dark:text-slate-300'
               }`}
             >
               <Globe className="w-3.5 h-3.5" />
@@ -390,8 +314,8 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
               disabled={useSearch}
               className={`px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold border-2 flex items-center gap-1 min-h-[32px] whitespace-nowrap transition-colors disabled:opacity-50 shrink-0 ${
                 fastMode && !useSearch
-                  ? 'bg-amber-50 border-[#FFC800] text-amber-800'
-                  : 'bg-white border-[#E5E5E5] text-slate-600'
+                  ? 'bg-amber-50 dark:bg-amber-950/50 border-[#FFC800] text-amber-800 dark:text-amber-300'
+                  : 'bg-white dark:bg-slate-700 border-[#E5E5E5] dark:border-slate-600 text-slate-600 dark:text-slate-300'
               }`}
             >
               <Zap className="w-3.5 h-3.5" />
@@ -402,7 +326,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
       </div>
 
       {/* Tall, ChatGPT-like Scrollable Conversation Thread */}
-      <div className="flex-1 min-h-[360px] sm:min-h-[420px] overflow-y-auto overscroll-contain bg-slate-50/75 border-2 border-[#E5E5E5] rounded-2xl sm:rounded-3xl p-3 sm:p-5 space-y-3.5">
+      <div className="flex-1 min-h-[360px] sm:min-h-[420px] overflow-y-auto overscroll-contain bg-slate-50/75 dark:bg-slate-900/70 border-2 border-[#E5E5E5] dark:border-slate-800 rounded-2xl sm:rounded-3xl p-3 sm:p-5 space-y-3.5">
         {messages.map((msg) => {
           const isUser = msg.role === 'user';
           return (
@@ -414,14 +338,23 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
                 className={`max-w-[88%] sm:max-w-[78%] rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base leading-relaxed break-words ${
                   isUser
                     ? 'bg-[#00BFFF] text-white font-semibold rounded-br-sm'
-                    : 'bg-white border-2 border-[#E5E5E5] text-slate-800 font-semibold rounded-bl-sm'
+                    : msg.isError
+                      ? 'bg-rose-50 dark:bg-rose-950/50 border-2 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 font-semibold rounded-bl-sm'
+                      : 'bg-white dark:bg-slate-800 border-2 border-[#E5E5E5] dark:border-slate-700 text-slate-800 dark:text-slate-100 font-semibold rounded-bl-sm'
                 }`}
               >
+                {msg.isError && (
+                  <div className="flex items-center gap-1.5 text-xs font-extrabold mb-1 text-rose-600 dark:text-rose-300">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>Gemini AI xabar beradi</span>
+                  </div>
+                )}
+
                 <div className="whitespace-pre-wrap">{msg.text}</div>
 
                 {!isUser && msg.sources && msg.sources.length > 0 && (
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-1.5">
-                    <div className="text-[11px] font-extrabold text-[#008ECC] flex items-center gap-1">
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700 space-y-1.5">
+                    <div className="text-[11px] font-extrabold text-[#008ECC] dark:text-[#38BDF8] flex items-center gap-1">
                       <Globe className="w-3.5 h-3.5" />
                       <span>Google Qidiruv manbalari:</span>
                     </div>
@@ -432,7 +365,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
                           href={src.uri}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs font-bold text-[#008ECC] bg-[#E5F8FF] hover:bg-[#D2F2FF] px-2.5 py-1 rounded-lg transition-colors max-w-full"
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[#008ECC] dark:text-[#38BDF8] bg-[#E5F8FF] dark:bg-slate-700 hover:bg-[#D2F2FF] px-2.5 py-1 rounded-lg transition-colors max-w-full"
                         >
                           <span className="truncate max-w-[180px]">{src.title}</span>
                           <ExternalLink className="w-3 h-3 shrink-0" />
@@ -448,7 +381,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
 
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-white border-2 border-[#E5E5E5] rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm font-bold text-[#008ECC] flex items-center gap-2">
+            <div className="bg-white dark:bg-slate-800 border-2 border-[#E5E5E5] dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm font-bold text-[#008ECC] dark:text-[#38BDF8] flex items-center gap-2">
               <Sparkles className="w-4 h-4 animate-spin" />
               <span>Kiki javob tayyorlamoqda...</span>
             </div>
@@ -458,9 +391,8 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
         <div ref={threadEndRef} />
       </div>
 
-      {/* Always-Visible Sticky Bottom Composer Bar (Pinned Above Mobile Bottom Nav) */}
-      <div className="sticky bottom-[62px] lg:bottom-0 z-20 shrink-0 bg-white/95 backdrop-blur-md pt-2 pb-1.5 mt-2 space-y-2">
-        {/* 1-Row Horizontal Scrollable Quick Suggestions */}
+      {/* Always-Visible Sticky Bottom Composer Bar */}
+      <div className="sticky bottom-[62px] lg:bottom-0 z-20 shrink-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md pt-2 pb-1.5 mt-2 space-y-2">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {suggestions.map((suggestion) => (
             <button
@@ -468,14 +400,13 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
               type="button"
               disabled={isLoading}
               onClick={() => sendMessage(suggestion)}
-              className="text-[11px] sm:text-xs font-bold text-[#008ECC] bg-[#E5F8FF] hover:bg-[#D2F2FF] border border-[#00BFFF]/40 rounded-xl px-2.5 py-1.5 transition-colors whitespace-nowrap shrink-0"
+              className="text-[11px] sm:text-xs font-bold text-[#008ECC] dark:text-[#38BDF8] bg-[#E5F8FF] dark:bg-slate-800 hover:bg-[#D2F2FF] dark:hover:bg-slate-700 border border-[#00BFFF]/40 rounded-xl px-2.5 py-1.5 transition-colors whitespace-nowrap shrink-0"
             >
               {suggestion}
             </button>
           ))}
         </div>
 
-        {/* Input & Prominent 3D Send Button */}
         <form onSubmit={handleSubmit} className="flex items-center gap-2 w-full min-w-0">
           <input
             type="text"
@@ -484,7 +415,7 @@ export const KikiChatView: React.FC<KikiChatViewProps> = ({ sfxEnabled }) => {
             placeholder="Xabar yozing..."
             aria-label="Xabar yozing"
             disabled={isLoading}
-            className="flex-1 min-w-0 rounded-2xl border-2 border-[#E5E5E5] focus:border-[#00BFFF] focus:outline-none px-3.5 sm:px-4 py-3 text-sm sm:text-base font-semibold text-slate-900 bg-white"
+            className="flex-1 min-w-0 rounded-2xl border-2 border-[#E5E5E5] dark:border-slate-700 focus:border-[#00BFFF] focus:outline-none px-3.5 sm:px-4 py-3 text-sm sm:text-base font-semibold text-slate-900 dark:text-white bg-white dark:bg-slate-800"
           />
           <button
             type="submit"

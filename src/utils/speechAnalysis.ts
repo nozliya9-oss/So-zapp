@@ -192,3 +192,25 @@ export function analyzePronunciation(
     isSimulated,
   };
 }
+
+export function isSpeechAttemptUnclear(
+  transcript: string,
+  targetWord: string,
+  accuracy: number
+): boolean {
+  if (accuracy < 60) return true;
+  const normHeard = normalizeText(transcript);
+  const normTarget = normalizeText(targetWord);
+  if (!normHeard || !normTarget) return true;
+  if (
+    normHeard === normTarget ||
+    normHeard.includes(normTarget) ||
+    normTarget.includes(normHeard)
+  ) {
+    return false;
+  }
+  const dist = levenshtein(normHeard, normTarget);
+  const maxLen = Math.max(normHeard.length, normTarget.length, 1);
+  const similarity = Math.max(0, 1 - dist / maxLen);
+  return similarity < 0.42;
+}

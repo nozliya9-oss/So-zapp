@@ -13,14 +13,22 @@ import {
 } from 'lucide-react';
 import { LessonNode, SoundKey, SpeechAnalysisResult } from '../types';
 import { KikiMascot, KikiMood } from './KikiMascot';
+import { MicIssueHelperCard } from './MicIssueHelperCard';
+import { useKikiVoice } from '../context/KikiVoiceContext';
 import {
   playButtonPop,
   playLessonCompleteFanfare,
   playRetryTone,
   playSuccessChime,
+  prefetchKikiSpeech,
   speakWord,
+  stopKikiSpeaking,
+  unlockKikiAudio,
 } from '../utils/soundEffects';
-import { analyzePronunciation } from '../utils/speechAnalysis';
+import {
+  analyzePronunciation,
+  isSpeechAttemptUnclear,
+} from '../utils/speechAnalysis';
 
 interface PracticeModalProps {
   node: LessonNode;
@@ -92,6 +100,7 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
   onWordSuccess,
   onLessonComplete,
 }) => {
+  const { voiceStyle } = useKikiVoice();
   const [wordIndex, setWordIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
   const [isMicTesterActive, setIsMicTesterActive] = useState(false);
@@ -100,7 +109,17 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
   const [liveVolumePct, setLiveVolumePct] = useState(0);
   const [livePeakHz, setLivePeakHz] = useState(0);
   const [analysis, setAnalysis] = useState<SpeechAnalysisResult | null>(null);
-  const [micWarning, setMicWarning] = useState<string | null>(null);
+  const [micIssueKey, setMicIssueKey] = useState(0);
+  const [micIssueHint, setMicIssueHint] = useState<string | null>(null);
+
+  const triggerMicIssue = (hint?: string) => {
+    setMicIssueHint(hint || null);
+    setMicIssueKey((prev) => prev + 1);
+  };
+  const clearMicIssue = () => {
+    setMicIssueKey(0);
+    setMicIssueHint(null);
+  };
   const [sessionScores, setSessionScores] = useState<
     { sound: string; accuracy: number; pitchHz: number }[]
   >([]);
@@ -117,6 +136,7 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
   const energySamplesRef = useRef<number[]>([]);
   const peakCapsRef = useRef<number[]>(Array(FREQ_BAR_COUNT).fill(0));
   const simBinsRef = useRef<number[]>(Array(FREQ_BAR_COUNT).fill(8));
+  const unclearAttemptsRef = useRef<number>(0);
 
   const currentWord = node.words[wordIndex];
   const progressPercent = lessonFinished
@@ -239,11 +259,16 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
     drawFrequencyGraph(Array(FREQ_BAR_COUNT).fill(18), 'idle');
     return () => {
       cleanupAudioHardware();
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
+      stopKikiSpeaking();
     };
   }, []);
+
+  useEffect(() => {
+    unlockKikiAudio();
+    node.words.forEach((w) => {
+      prefetchKikiSpeech(w.word, w.speechLang, voiceStyle);
+    });
+  }, [node, voiceStyle]);
 
   useEffect(() => {
     if (!isListening && !isMicTesterActive && !isSimulating) {
@@ -336,12 +361,14 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
         : 'idle';
 
   const handleListen = () => {
+    unlockKikiAudio();
     playButtonPop(!sfxEnabled);
     speakWord(
       currentWord.word,
       currentWord.speechLang,
       () => setIsSpeakingAudio(true),
-      () => setIsSpeakingAudio(false)
+      () => setIsSpeakingAudio(false),
+      voiceStyle
     );
   };
 
@@ -359,22 +386,56 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
           pitchHz: result.pitchHz,
         },
       ]);
+      if (!result.isSimulated) {
+        const isUnclear = isSpeechAttemptUnclear(
+          result.transcript,
+          currentWord.word,
+          result.accuracy
+        );
+        if (isUnclear) {
+          unclearAttemptsRef.current += 1;
+          if (unclearAttemptsRef.current >= 2) {
+            triggerMicIssue('Ketma-ket noaniq yoki begona so‘z eshitildi');
+          }
+        } else {
+          unclearAttemptsRef.current = 0;
+          clearMicIssue();
+        }
+      } else {
+        unclearAttemptsRef.current = 0;
+        clearMicIssue();
+      }
     } else {
       playRetryTone(!sfxEnabled);
+      if (!result.isSimulated) {
+        unclearAttemptsRef.current += 1;
+        if (result.accuracy === 0 || unclearAttemptsRef.current >= 2) {
+          triggerMicIssue('Ketma-ket noaniq talaffuz yoki begona so‘z eshitildi');
+        }
+      }
     }
   };
 
   const handleToggleMicTester = async () => {
     if (isMicTesterActive) {
       playButtonPop(!sfxEnabled);
+      const peakEnergy =
+        energySamplesRef.current.length > 0
+          ? Math.max(...energySamplesRef.current)
+          : 0;
+      const sampleCount = energySamplesRef.current.length;
       cleanupAudioHardware();
       setIsMicTesterActive(false);
+      if (sampleCount > 15 && peakEnergy < 0.02) {
+        playRetryTone(!sfxEnabled);
+        triggerMicIssue('Mikrofondan tovush kelmadi');
+      }
       return;
     }
     if (isListening || isSimulating) return;
 
     playButtonPop(!sfxEnabled);
-    setMicWarning(null);
+    clearMicIssue();
     energySamplesRef.current = [];
     try {
       setIsMicTesterActive(true);
@@ -382,16 +443,24 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
     } catch {
       cleanupAudioHardware();
       setIsMicTesterActive(false);
-      setMicWarning(
-        'Mikrofon ulanmadi yoki ruxsat berilmadi. «Simulyatsiya (Test)» orqali sinab ko‘rishingiz mumkin.'
-      );
+      playRetryTone(!sfxEnabled);
+      triggerMicIssue('Mikrofon ulanmadi yoki ruxsat berilmagan');
     }
   };
 
   const handleStartMicrophone = async () => {
     if (isListening) {
+      const peakEnergy =
+        energySamplesRef.current.length > 0
+          ? Math.max(...energySamplesRef.current)
+          : 0;
+      const sampleCount = energySamplesRef.current.length;
       cleanupAudioHardware();
       setIsListening(false);
+      if (sampleCount <= 4 || peakEnergy < 0.03) {
+        playRetryTone(!sfxEnabled);
+        triggerMicIssue('Ovoz yozib olinmadi');
+      }
       return;
     }
 
@@ -401,7 +470,7 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
     }
 
     playButtonPop(!sfxEnabled);
-    setMicWarning(null);
+    clearMicIssue();
     setAnalysis(null);
     energySamplesRef.current = [];
 
@@ -412,26 +481,14 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
         .webkitSpeechRecognition;
 
     if (!SpeechRecognitionCtor) {
-      setMicWarning(
-        'Brauzeringizda jonli ovoz aniqlash qo‘llab-quvvatlanmadi. «Jonli spektr» yoki «Simulyatsiya (Test)» tugmasidan foydalaning.'
-      );
+      playRetryTone(!sfxEnabled);
+      triggerMicIssue('Brauzer jonli ovoz aniqlashni qo‘llamaydi');
       return;
     }
 
     try {
       setIsListening(true);
-
-      try {
-        await attachAnalyserStream();
-      } catch {
-        simTimerRef.current = window.setInterval(() => {
-          const fakeBins = Array.from({ length: FREQ_BAR_COUNT }, (_, idx) => {
-            const bell = Math.exp(-Math.pow((idx - 8) / 7, 2));
-            return Math.round((45 + Math.random() * 145) * bell + 18);
-          });
-          drawFrequencyGraph(fakeBins, 'mic');
-        }, 50);
-      }
+      await attachAnalyserStream();
 
       const recognition = new SpeechRecognitionCtor();
       recognitionRef.current = recognition;
@@ -445,8 +502,12 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
       recognition.onresult = (event) => {
         handled = true;
         const bestAlt = event.results?.[0]?.[0];
-        const transcript = bestAlt?.transcript || '';
+        const transcript = bestAlt?.transcript?.trim() || '';
         const confidence = bestAlt?.confidence ?? 0.82;
+        const peakEnergy =
+          energySamplesRef.current.length > 0
+            ? Math.max(...energySamplesRef.current)
+            : 0;
         const avgEnergy =
           energySamplesRef.current.length > 0
             ? energySamplesRef.current.reduce((a, b) => a + b, 0) /
@@ -455,6 +516,11 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
 
         cleanupAudioHardware();
         setIsListening(false);
+        if (!transcript && peakEnergy < 0.035) {
+          playRetryTone(!sfxEnabled);
+          triggerMicIssue('Ovoz yozib olinmadi');
+          return;
+        }
         const result = analyzePronunciation(transcript, currentWord, {
           averageMicEnergy: avgEnergy,
           recognitionConfidence: confidence,
@@ -467,18 +533,15 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
         handled = true;
         cleanupAudioHardware();
         setIsListening(false);
+        playRetryTone(!sfxEnabled);
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-          setMicWarning(
-            'Mikrofonga ruxsat berilmadi. «Simulyatsiya (Test)» tugmasi orqali tekshirishingiz mumkin.'
-          );
+          triggerMicIssue('Mikrofonga ruxsat berilmagan');
+        } else if (event.error === 'audio-capture' || event.error === 'not-found') {
+          triggerMicIssue('Mikrofon topilmadi');
         } else if (event.error === 'no-speech') {
-          setMicWarning(
-            'Ovoz eshitilmadi. Mikrofonga yaqinroq gapiring yoki «Simulyatsiya (Test)» tugmasini bosing.'
-          );
+          triggerMicIssue('Ovoz eshitilmadi');
         } else {
-          setMicWarning(
-            'Shovqin yoki brauzer cheklovi sababli tahlil qilib bo‘lmadi. «Simulyatsiya (Test)» tugmasini bosing.'
-          );
+          triggerMicIssue('Mikrofondan yozishda xatolik');
         }
       };
 
@@ -486,6 +549,8 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
         if (!handled) {
           cleanupAudioHardware();
           setIsListening(false);
+          playRetryTone(!sfxEnabled);
+          triggerMicIssue('Ovoz yozib olinmadi');
         }
       };
 
@@ -493,16 +558,15 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
     } catch {
       cleanupAudioHardware();
       setIsListening(false);
-      setMicWarning(
-        'Mikrofonni ishga tushirib bo‘lmadi. «Simulyatsiya (Test)» tugmasidan foydalaning.'
-      );
+      playRetryTone(!sfxEnabled);
+      triggerMicIssue('Mikrofon topilmadi yoki ruxsat berilmagan');
     }
   };
 
   const handleSimulation = (simulateWeak = false) => {
     if (isListening || isSimulating || isMicTesterActive) return;
     playButtonPop(!sfxEnabled);
-    setMicWarning(null);
+    clearMicIssue();
     setAnalysis(null);
     setIsSimulating(true);
 
@@ -581,10 +645,11 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
     playButtonPop(!sfxEnabled);
     cleanupAudioHardware();
     setIsMicTesterActive(false);
+    unclearAttemptsRef.current = 0;
     if (wordIndex < node.words.length - 1) {
       setWordIndex((prev) => prev + 1);
       setAnalysis(null);
-      setMicWarning(null);
+      clearMicIssue();
     } else {
       finishLessonNow();
     }
@@ -593,18 +658,19 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
   const handleRetryWord = () => {
     playButtonPop(!sfxEnabled);
     setAnalysis(null);
-    setMicWarning(null);
+    unclearAttemptsRef.current = 0;
+    clearMicIssue();
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-white flex flex-col overflow-y-auto"
+      className="fixed inset-0 z-50 bg-white dark:bg-slate-950 flex flex-col overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-label={node.title}
     >
       {/* Top Progress Header (No hearts!) */}
-      <div className="border-b-2 border-[#E5E5E5] px-4 sm:px-8 py-4 bg-white sticky top-0 z-20">
+      <div className="border-b-2 border-[#E5E5E5] dark:border-slate-800 px-4 sm:px-8 py-4 bg-white dark:bg-slate-900 sticky top-0 z-20">
         <div className="max-w-3xl mx-auto flex items-center gap-4">
           <button
             type="button"
@@ -613,14 +679,14 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
               cleanupAudioHardware();
               onClose();
             }}
-            className="min-w-[44px] min-h-[44px] rounded-xl border-2 border-[#E5E5E5] hover:bg-slate-50 flex items-center justify-center text-slate-500 shrink-0"
+            className="min-w-[44px] min-h-[44px] rounded-xl border-2 border-[#E5E5E5] dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-300 shrink-0"
             aria-label="Mashqdan chiqish"
           >
             <X className="w-5 h-5" />
           </button>
 
           <div className="flex-1">
-            <div className="h-4 w-full bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-4 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-[#58CC02] rounded-full transition-all duration-300"
                 style={{ width: `${Math.max(8, progressPercent)}%` }}
@@ -628,11 +694,11 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
             </div>
           </div>
 
-          <div className="text-xs sm:text-sm font-extrabold text-slate-700 tabular-nums whitespace-nowrap">
+          <div className="text-xs sm:text-sm font-extrabold text-slate-700 dark:text-slate-200 tabular-nums whitespace-nowrap">
             {lessonFinished ? node.words.length : wordIndex + 1} / {node.words.length} so‘z
           </div>
 
-          <div className="flex items-center gap-1 text-amber-600 font-extrabold text-sm tabular-nums shrink-0">
+          <div className="flex items-center gap-1 text-amber-600 dark:text-[#FFC800] font-extrabold text-sm tabular-nums shrink-0">
             <Star className="w-4 h-4 text-[#FFC800] fill-[#FFC800]" />
             <span>+{earnedStarsInLesson}</span>
           </div>
@@ -644,12 +710,12 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
         {lessonFinished ? (
           <div className="my-auto flex flex-col items-center text-center py-8">
             <KikiMascot mood="happy" size="lg" />
-            <h2 className="font-display font-bold text-3xl sm:text-4xl text-slate-900 mt-4">
+            <h2 className="font-display font-bold text-3xl sm:text-4xl text-slate-900 dark:text-white mt-4">
               {node.variant === 'assessment'
                 ? 'Haftalik baholash saqlandi!'
                 : 'Dars muvaffaqiyatli yakunlandi!'}
             </h2>
-            <p className="text-base text-slate-600 font-semibold mt-2 max-w-md">
+            <p className="text-base text-slate-600 dark:text-slate-300 font-semibold mt-2 max-w-md">
               {node.variant === 'assessment'
                 ? 'Barcha 6 ta tovush bo‘yicha natijalar Logoped va Ota-ona kabinetiga saqlandi.'
                 : 'Kiki bilan navbatdagi mashqni bajardingiz. Ovoz biometrikasi tahlili yangilandi.'}
@@ -698,44 +764,48 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
             <div className="space-y-5">
               {/* Lesson Title & Instruction */}
               <div className="text-center sm:text-left">
-                <p className="text-xs font-extrabold text-[#008ECC] uppercase tracking-wider">
+                <p className="text-xs font-extrabold text-[#008ECC] dark:text-[#38BDF8] uppercase tracking-wider">
                   {node.title}
                 </p>
-                <h2 className="font-display font-bold text-xl sm:text-2xl text-slate-900 mt-1">
+                <h2 className="font-display font-bold text-xl sm:text-2xl text-slate-900 dark:text-white mt-1">
                   So‘zni tinglang va aniq talaffuz qiling
                 </h2>
               </div>
 
               {/* Kiki + Target Word Card */}
-              <div className="bg-white border-2 border-[#E5E5E5] rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row items-center gap-5">
+              <div className="bg-white dark:bg-slate-900 border-2 border-[#E5E5E5] dark:border-slate-800 rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row items-center gap-5">
                 <div className="shrink-0 flex flex-col items-center">
-                  <KikiMascot mood={kikiMood} size="md" />
+                  <KikiMascot
+                    mood={kikiMood}
+                    size="md"
+                    isSpeaking={isSpeakingAudio}
+                  />
                 </div>
 
                 <div className="flex-1 text-center sm:text-left min-w-0">
-                  <div className="inline-block bg-[#E5F8FF] text-[#008ECC] font-extrabold text-xs px-3 py-1 rounded-xl mb-2">
+                  <div className="inline-block bg-[#E5F8FF] dark:bg-[#00BFFF]/20 text-[#008ECC] dark:text-[#38BDF8] font-extrabold text-xs px-3 py-1 rounded-xl mb-2">
                     Maqsadli tovush: «{currentWord.targetSound}»
                   </div>
 
-                  <div className="font-display font-bold text-3xl sm:text-4xl text-slate-900 tracking-wide">
+                  <div className="font-display font-bold text-3xl sm:text-4xl text-slate-900 dark:text-white tracking-wide">
                     {highlightTargetSound(currentWord.word, currentWord.targetSound)}
                   </div>
 
-                  <div className="mt-1.5 font-display font-bold text-lg sm:text-xl text-slate-500 tracking-widest">
+                  <div className="mt-1.5 font-display font-bold text-lg sm:text-xl text-slate-500 dark:text-slate-400 tracking-widest">
                     {currentWord.syllables}
                   </div>
 
                   {currentWord.meaningUz && (
-                    <p className="text-xs font-bold text-slate-500 mt-1">
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-1">
                       Ma’nosi: {currentWord.meaningUz}
                     </p>
                   )}
 
-                  <p className="mt-2 text-xs sm:text-sm font-bold text-slate-600">
+                  <p className="mt-2 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300">
                     Namuna gap: «{currentWord.exampleUsage}»
                   </p>
 
-                  <p className="mt-2.5 text-sm font-semibold text-slate-700 bg-slate-50 border border-[#E5E5E5] rounded-2xl px-4 py-2.5">
+                  <p className="mt-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 border border-[#E5E5E5] dark:border-slate-700 rounded-2xl px-4 py-2.5">
                     💡 {currentWord.tipUz}
                   </p>
 
@@ -743,7 +813,7 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
                     <button
                       type="button"
                       onClick={handleListen}
-                      className={`btn-3d bg-[#E5F8FF] hover:bg-[#D4F3FF] text-[#008ECC] border-2 border-[#00BFFF] border-b-[5px] border-b-[#008ECC] rounded-2xl px-5 py-2.5 font-display font-bold text-sm sm:text-base flex items-center gap-2 ${
+                      className={`btn-3d bg-[#E5F8FF] dark:bg-slate-800 hover:bg-[#D4F3FF] dark:hover:bg-slate-700 text-[#008ECC] dark:text-[#38BDF8] border-2 border-[#00BFFF] border-b-[5px] border-b-[#008ECC] rounded-2xl px-5 py-2.5 font-display font-bold text-sm sm:text-base flex items-center gap-2 ${
                         isSpeakingAudio ? 'ring-4 ring-[#00BFFF]/30' : ''
                       }`}
                     >
@@ -756,49 +826,49 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
 
               {/* Multilingual Contrast Guide */}
               {currentWord.contrastNote && (
-                <div className="bg-violet-50/70 border-2 border-violet-200 rounded-2xl p-4">
-                  <div className="flex items-center gap-2 text-violet-800 font-display font-bold text-sm mb-2">
+                <div className="bg-violet-50/70 dark:bg-violet-950/35 border-2 border-violet-200 dark:border-violet-800 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 text-violet-800 dark:text-violet-300 font-display font-bold text-sm mb-2">
                     <Globe className="w-4 h-4" />
                     <span>Ikki tilli talaffuz farqi</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="bg-white border border-violet-200 rounded-xl p-3">
-                      <div className="font-extrabold text-[#008ECC]">
+                    <div className="bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-800 rounded-xl p-3">
+                      <div className="font-extrabold text-[#008ECC] dark:text-[#38BDF8]">
                         🇺🇿 {currentWord.contrastNote.uzSound}
                       </div>
-                      <div className="text-slate-700 font-semibold mt-0.5">
+                      <div className="text-slate-700 dark:text-slate-200 font-semibold mt-0.5">
                         {currentWord.contrastNote.uzExample}
                       </div>
                     </div>
-                    <div className="bg-white border border-violet-200 rounded-xl p-3">
-                      <div className="font-extrabold text-violet-700">
+                    <div className="bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-800 rounded-xl p-3">
+                      <div className="font-extrabold text-violet-700 dark:text-violet-300">
                         🇷🇺 {currentWord.contrastNote.ruSound}
                       </div>
-                      <div className="text-slate-700 font-semibold mt-0.5">
+                      <div className="text-slate-700 dark:text-slate-200 font-semibold mt-0.5">
                         {currentWord.contrastNote.ruExample}
                       </div>
                     </div>
                   </div>
-                  <p className="text-xs font-semibold text-violet-900 mt-2">
+                  <p className="text-xs font-semibold text-violet-900 dark:text-violet-200 mt-2">
                     {currentWord.contrastNote.explanation}
                   </p>
                 </div>
               )}
 
               {/* Live Microphone & Real-Time AnalyserNode Frequency Bar Graph */}
-              <div className="bg-slate-50 border-2 border-[#E5E5E5] rounded-3xl p-5 flex flex-col items-center text-center">
-                <div className="w-full max-w-md flex items-center justify-between text-xs font-bold text-slate-600 mb-2">
-                  <span className="flex items-center gap-1.5 text-[#008ECC]">
+              <div className="bg-slate-50 dark:bg-slate-900 border-2 border-[#E5E5E5] dark:border-slate-800 rounded-3xl p-5 flex flex-col items-center text-center">
+                <div className="w-full max-w-md flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
+                  <span className="flex items-center gap-1.5 text-[#008ECC] dark:text-[#38BDF8]">
                     <Activity className="w-4 h-4" />
                     <span>Jonli ovoz chastotasi (AnalyserNode)</span>
                   </span>
-                  <span className="tabular-nums text-slate-700">
+                  <span className="tabular-nums text-slate-700 dark:text-slate-200">
                     {livePeakHz > 0 ? `${livePeakHz} Hz` : '80–4000 Hz'} ·{' '}
                     {liveVolumePct}%
                   </span>
                 </div>
 
-                <div className="w-full max-w-md bg-white border-2 border-[#E5E5E5] rounded-2xl p-3 mb-4">
+                <div className="w-full max-w-md bg-white dark:bg-slate-800 border-2 border-[#E5E5E5] dark:border-slate-700 rounded-2xl p-3 mb-4">
                   <canvas
                     ref={canvasRef}
                     className="w-full h-24 block"
@@ -842,7 +912,7 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
                     className={`text-xs font-bold py-2 px-3 rounded-xl min-h-[38px] flex items-center gap-1.5 border transition-colors disabled:opacity-50 ${
                       isMicTesterActive
                         ? 'bg-[#FFE4E6] text-[#C81E1E] border-[#FF4B4B]'
-                        : 'bg-white text-slate-700 border-[#E5E5E5] hover:bg-slate-100'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-[#E5E5E5] dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }`}
                   >
                     <Activity className="w-3.5 h-3.5" />
@@ -875,10 +945,17 @@ export const PracticeModal: React.FC<PracticeModalProps> = ({
                   </button>
                 </div>
 
-                {micWarning && (
-                  <p className="mt-2 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2 max-w-md">
-                    {micWarning}
-                  </p>
+                {micIssueKey > 0 && (
+                  <div className="w-full mt-3">
+                    <MicIssueHelperCard
+                      issueKey={micIssueKey}
+                      sfxEnabled={sfxEnabled}
+                      onRetry={handleStartMicrophone}
+                      onFallbackAction={() => handleSimulation(false)}
+                      fallbackLabel="Simulyatsiya (Test)"
+                      detailHint={micIssueHint}
+                    />
+                  </div>
                 )}
               </div>
 

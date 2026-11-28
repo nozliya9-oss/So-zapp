@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import {
   DEFAULT_PROFILE,
   INITIAL_SESSIONS,
@@ -7,10 +8,15 @@ import {
   buildInitialCurriculum,
 } from './data/lessonsData';
 import {
+  AuthUser,
   CityBuilding,
+  DiagnosticReport,
+  GameStageProgress,
+  HomeSubView,
   Language,
   LessonNode,
   PracticeSession,
+  ProfileSubTab,
   SoundKey,
   SoundStat,
   TabId,
@@ -18,19 +24,28 @@ import {
   WeekCurriculum,
   WeeklyAssessmentRecord,
 } from './types';
+import { mapDiagnosticWeakestToSoundKey } from './data/diagnosticData';
 import { SidebarNav } from './components/SidebarNav';
 import { TopBar } from './components/TopBar';
+import { AsosiyHubView } from './components/AsosiyHubView';
 import { LessonsPath } from './components/LessonsPath';
+import { DiagnosticExamView } from './components/DiagnosticExamView';
 import { WordCityView } from './components/WordCityView';
 import { GamesView } from './components/GamesView';
 import { TournamentView } from './components/TournamentView';
 import { KikiChatView } from './components/KikiChatView';
-import { TherapistDashboardView } from './components/TherapistDashboardView';
-import { ParentDashboardView } from './components/ParentDashboardView';
 import { ProfileView } from './components/ProfileView';
 import { RightPanel } from './components/RightPanel';
 import { PracticeModal } from './components/PracticeModal';
-import { startBackgroundMusic, stopBackgroundMusic } from './utils/soundEffects';
+import { LoginView } from './components/LoginView';
+import { KikiVoiceProvider } from './context/KikiVoiceContext';
+import {
+  normalizeKikiVoiceStyle,
+  playButtonPop,
+  setKikiVoiceStyle,
+  startBackgroundMusic,
+  stopBackgroundMusic,
+} from './utils/soundEffects';
 
 const STORAGE_KEYS = {
   PROFILE: 'kiki_user_profile_v1',
@@ -38,6 +53,8 @@ const STORAGE_KEYS = {
   STARS: 'kiki_stars_v2',
   COINS: 'kiki_coins_v2',
   CLAIMED_BUILDINGS: 'kiki_claimed_buildings_v2',
+  DIAGNOSTIC_REPORT: 'kiki_diagnostic_report_v1',
+  GAME_STAGES: 'kiki_game_stages_v1',
 };
 
 function loadStoredJson<T>(key: string, fallback: T): T {
@@ -52,12 +69,20 @@ function loadStoredJson<T>(key: string, fallback: T): T {
 }
 
 export default function App() {
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [language, setLanguage] = useState<Language>('uz');
-  const [activeTab, setActiveTab] = useState<TabId>('lessons');
+  const [activeTab, setActiveTab] = useState<TabId>('home');
+  const [homeSubView, setHomeSubView] = useState<HomeSubView>('hub');
+  const [profileSubTab, setProfileSubTab] = useState<ProfileSubTab>('child');
 
-  const [profile, setProfile] = useState<UserProfile>(() =>
-    loadStoredJson<UserProfile>(STORAGE_KEYS.PROFILE, DEFAULT_PROFILE)
-  );
+  const [profile, setProfile] = useState<UserProfile>(() => {
+    const loaded = loadStoredJson<UserProfile>(STORAGE_KEYS.PROFILE, DEFAULT_PROFILE);
+    return {
+      ...loaded,
+      voiceStyle: normalizeKikiVoiceStyle(loaded.voiceStyle),
+    };
+  });
   const [stars, setStars] = useState<number>(() =>
     loadStoredJson<number>(STORAGE_KEYS.STARS, 45)
   );
@@ -89,6 +114,15 @@ export default function App() {
   const [todayWordsCompleted, setTodayWordsCompleted] = useState<number>(3);
   const [soundStats, setSoundStats] = useState<SoundStat[]>(INITIAL_SOUND_STATS);
   const [sessions, setSessions] = useState<PracticeSession[]>(INITIAL_SESSIONS);
+  const [diagnosticReport, setDiagnosticReport] =
+    useState<DiagnosticReport | null>(() =>
+      loadStoredJson<DiagnosticReport | null>(STORAGE_KEYS.DIAGNOSTIC_REPORT, null)
+    );
+  const [gameStageProgress, setGameStageProgress] = useState<
+    Record<number, GameStageProgress>
+  >(() =>
+    loadStoredJson<Record<number, GameStageProgress>>(STORAGE_KEYS.GAME_STAGES, {})
+  );
 
   // Persist profile, stars, coins, claimed buildings, and weekly assessments
   useEffect(() => {
@@ -137,9 +171,46 @@ export default function App() {
     }
   }, [weeklyAssessments]);
 
-  // Background Music lifecycle controlled strictly by profile.musicEnabled
+  // Persist diagnostic report
   useEffect(() => {
-    if (profile.musicEnabled) {
+    try {
+      if (diagnosticReport) {
+        window.localStorage.setItem(
+          STORAGE_KEYS.DIAGNOSTIC_REPORT,
+          JSON.stringify(diagnosticReport)
+        );
+      }
+    } catch {
+      // Ignore
+    }
+  }, [diagnosticReport]);
+
+  // Persist game stages progress
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEYS.GAME_STAGES,
+        JSON.stringify(gameStageProgress)
+      );
+    } catch {
+      // Ignore
+    }
+  }, [gameStageProgress]);
+
+  // Synchronize Tongi rejim (light) / Tungi rejim (dark) with document root
+  useEffect(() => {
+    const isDark = profile.theme === 'dark';
+    document.documentElement.classList.toggle('dark', isDark);
+  }, [profile.theme]);
+
+  // Synchronize Kiki voice style globally
+  useEffect(() => {
+    setKikiVoiceStyle(normalizeKikiVoiceStyle(profile.voiceStyle));
+  }, [profile.voiceStyle]);
+
+  // Background Music lifecycle controlled strictly by authentication and profile.musicEnabled
+  useEffect(() => {
+    if (authToken && profile.musicEnabled) {
       startBackgroundMusic();
     } else {
       stopBackgroundMusic();
@@ -147,7 +218,40 @@ export default function App() {
     return () => {
       stopBackgroundMusic();
     };
-  }, [profile.musicEnabled]);
+  }, [authToken, profile.musicEnabled]);
+
+  const handleSelectTab = (tab: TabId) => {
+    setActiveTab(tab);
+    if (tab === 'home') {
+      setHomeSubView('hub');
+    }
+  };
+
+  const handleAuthenticated = (token: string, user: AuthUser) => {
+    setAuthToken(token);
+    setAuthUser(user);
+    setActiveTab('home');
+    setHomeSubView('hub');
+  };
+
+  const handleLogout = () => {
+    const tokenToRevoke = authToken;
+    setAuthToken(null);
+    setAuthUser(null);
+    setSelectedNode(null);
+    setActiveTab('home');
+    setHomeSubView('hub');
+    if (tokenToRevoke) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${tokenToRevoke}`,
+        },
+      }).catch(() => {
+        // Ignore network errors on logout cleanup
+      });
+    }
+  };
 
   const currentWeeks = language === 'uz' ? uzWeeks : ruWeeks;
   const currentCustomNodes = customNodes.filter((n) => n.language === language);
@@ -171,9 +275,26 @@ export default function App() {
     setCoins((prev) => prev + 20);
   };
 
-  const handleGameRewardEarned = (starsEarned: number, coinsEarned: number) => {
+  const handleGameStageComplete = (
+    stage: number,
+    starsEarned: number,
+    scorePct: number,
+    bonusCoins: number
+  ) => {
+    setGameStageProgress((prev) => {
+      const existing = prev[stage];
+      return {
+        ...prev,
+        [stage]: {
+          stage,
+          completed: true,
+          stars: Math.max(existing?.stars || 0, starsEarned),
+          bestScore: Math.max(existing?.bestScore || 0, scorePct),
+        },
+      };
+    });
     setStars((prev) => prev + starsEarned);
-    setCoins((prev) => prev + coinsEarned);
+    setCoins((prev) => prev + bonusCoins);
   };
 
   const handleLessonComplete = ({
@@ -287,137 +408,245 @@ export default function App() {
     setLanguage(newNode.language);
   };
 
+  const handleCompleteDiagnosticReport = (report: DiagnosticReport) => {
+    setDiagnosticReport(report);
+    const weakestSound = mapDiagnosticWeakestToSoundKey(report);
+    setProfile((prev) => ({ ...prev, focusSound: weakestSound }));
+    setStars((prev) => prev + 25);
+
+    const grouped: Record<string, number[]> = {};
+    report.letterScores.forEach((ls) => {
+      if (!grouped[ls.mappedSoundKey]) grouped[ls.mappedSoundKey] = [];
+      grouped[ls.mappedSoundKey].push(ls.score);
+    });
+
+    setSoundStats((prev) =>
+      prev.map((stat) => {
+        const scores = grouped[stat.sound];
+        if (!scores || scores.length === 0) return stat;
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        return {
+          ...stat,
+          previousAccuracy: stat.accuracy,
+          accuracy: avg,
+        };
+      })
+    );
+  };
+
   const showRightPanel =
-    activeTab === 'lessons' ||
     activeTab === 'city' ||
     activeTab === 'games' ||
-    activeTab === 'tournament';
+    (activeTab === 'home' && homeSubView !== 'diagnostic');
+
+  const subViewTitle =
+    homeSubView === 'diagnostic'
+      ? 'Birinchi imtihon — Nutq diagnostikasi'
+      : homeSubView === 'lessons'
+        ? 'Darslar yo‘li'
+        : homeSubView === 'tournament'
+          ? 'Haftalik turnir'
+          : '';
+
+  if (!authToken || !authUser) {
+    return (
+      <LoginView
+        sfxEnabled={profile.sfxEnabled}
+        onAuthenticated={handleAuthenticated}
+      />
+    );
+  }
 
   return (
-    <div
-      className={`min-h-screen bg-white text-slate-900 flex flex-col lg:flex-row ${
-        profile.inclusiveMode ? 'inclusive-mode bg-slate-50/40' : ''
-      }`}
+    <KikiVoiceProvider
+      initialStyle={normalizeKikiVoiceStyle(profile.voiceStyle)}
+      onSyncProfileStyle={(voiceStyle) => handleUpdateProfile({ voiceStyle })}
     >
-      {/* Left Navigation Sidebar (Desktop) & Bottom Nav (Mobile) */}
-      <SidebarNav
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        sfxEnabled={profile.sfxEnabled}
-      />
-
-      {/* Main Content Shell */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <TopBar
-          language={language}
-          onChangeLanguage={setLanguage}
-          stars={stars}
-          coins={coins}
-          profile={profile}
+      <div
+        className={`min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row transition-colors ${
+          profile.inclusiveMode ? 'inclusive-mode bg-slate-50/40 dark:bg-slate-900' : ''
+        }`}
+      >
+        {/* Left Navigation Sidebar (Desktop) & Bottom Nav (Mobile) — 5 Sections */}
+        <SidebarNav
+          activeTab={activeTab}
+          onSelectTab={handleSelectTab}
           sfxEnabled={profile.sfxEnabled}
-          onOpenProfile={() => setActiveTab('profile')}
         />
 
-        <div className="flex-1 flex min-w-0">
-          <main className="flex-1 min-w-0">
-            {activeTab === 'lessons' && (
-              <LessonsPath
-                language={language}
-                weeks={currentWeeks}
-                customNodes={currentCustomNodes}
-                onSelectNode={(node) => setSelectedNode(node)}
-                sfxEnabled={profile.sfxEnabled}
-              />
-            )}
+        {/* Main Content Shell */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopBar
+            language={language}
+            onChangeLanguage={setLanguage}
+            stars={stars}
+            profile={profile}
+            sfxEnabled={profile.sfxEnabled}
+            onOpenHome={() => handleSelectTab('home')}
+            onOpenProfile={() => setActiveTab('profile')}
+          />
 
-            {activeTab === 'city' && (
-              <WordCityView
+          <div className="flex-1 flex min-w-0">
+            <main className="flex-1 min-w-0">
+              {/* SECTION 1: ASOSIY (Main Hub + Sub-views) */}
+              {activeTab === 'home' && homeSubView === 'hub' && (
+                <AsosiyHubView
+                  profile={profile}
+                  stars={stars}
+                  activeNode={activeNode}
+                  diagnosticReport={diagnosticReport}
+                  sfxEnabled={profile.sfxEnabled}
+                  onOpenSubView={(view) => setHomeSubView(view)}
+                />
+              )}
+
+              {activeTab === 'home' && homeSubView !== 'hub' && (
+                <div>
+                  <div className="bg-white/95 dark:bg-slate-900/95 border-b border-[#E5E5E5] dark:border-slate-800 px-3 sm:px-6 py-2.5">
+                    <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playButtonPop(!profile.sfxEnabled);
+                          setHomeSubView('hub');
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E5F8FF] dark:bg-[#00BFFF]/20 text-[#008ECC] dark:text-[#38BDF8] font-display font-bold text-xs sm:text-sm hover:bg-[#D4F3FF] dark:hover:bg-[#00BFFF]/30 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Asosiyga qaytish</span>
+                      </button>
+                      <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 text-right leading-tight">
+                        {subViewTitle}
+                      </span>
+                    </div>
+                  </div>
+
+                  {homeSubView === 'diagnostic' && (
+                    <DiagnosticExamView
+                      report={diagnosticReport}
+                      voiceStyle={normalizeKikiVoiceStyle(profile.voiceStyle)}
+                      sfxEnabled={profile.sfxEnabled}
+                      onChangeVoiceStyle={(voiceStyle) =>
+                        handleUpdateProfile({ voiceStyle })
+                      }
+                      onCompleteReport={handleCompleteDiagnosticReport}
+                      onGoToCity={() => setActiveTab('city')}
+                    />
+                  )}
+
+                  {homeSubView === 'lessons' && (
+                    <LessonsPath
+                      language={language}
+                      weeks={currentWeeks}
+                      customNodes={currentCustomNodes}
+                      onSelectNode={(node) => setSelectedNode(node)}
+                      sfxEnabled={profile.sfxEnabled}
+                      diagnosticReport={diagnosticReport}
+                      onOpenDiagnostic={() => setHomeSubView('diagnostic')}
+                    />
+                  )}
+
+                  {homeSubView === 'tournament' && (
+                    <TournamentView
+                      stars={stars}
+                      profile={profile}
+                      sfxEnabled={profile.sfxEnabled}
+                      onGoToLessons={() => setHomeSubView('lessons')}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* SECTION 2: SO‘ZLAR SHAHRI */}
+              {activeTab === 'city' && (
+                <WordCityView
+                  stars={stars}
+                  coins={coins}
+                  claimedBuildingIds={claimedBuildingIds}
+                  language={language}
+                  sfxEnabled={profile.sfxEnabled}
+                  diagnosticReport={diagnosticReport}
+                  onClaimBuildingReward={handleClaimBuildingReward}
+                  onAddBonusCoins={(amount) => setCoins((prev) => prev + amount)}
+                  onGoToLessons={() => {
+                    setActiveTab('home');
+                    setHomeSubView('lessons');
+                  }}
+                  onOpenDiagnostic={() => {
+                    setActiveTab('home');
+                    setHomeSubView('diagnostic');
+                  }}
+                />
+              )}
+
+              {/* SECTION 3: O‘YINLAR (30-Stage Path) */}
+              {activeTab === 'games' && (
+                <GamesView
+                  sfxEnabled={profile.sfxEnabled}
+                  stageProgress={gameStageProgress}
+                  onStageComplete={handleGameStageComplete}
+                />
+              )}
+
+              {/* SECTION 4: KIKI AI */}
+              {activeTab === 'chat' && <KikiChatView sfxEnabled={profile.sfxEnabled} />}
+
+              {/* SECTION 5: PROFIL (4 Sub-tabs) */}
+              {activeTab === 'profile' && (
+                <ProfileView
+                  profile={profile}
+                  stars={stars}
+                  coins={coins}
+                  authUser={authUser}
+                  activeSubTab={profileSubTab}
+                  onChangeSubTab={setProfileSubTab}
+                  soundStats={soundStats}
+                  weeklyAssessments={weeklyAssessments}
+                  sessions={sessions}
+                  diagnosticReport={diagnosticReport}
+                  onUpdateProfile={handleUpdateProfile}
+                  onAssignCustomExercise={handleAssignCustomExercise}
+                  onGoToLessons={() => {
+                    setActiveTab('home');
+                    setHomeSubView('lessons');
+                  }}
+                  onLogout={handleLogout}
+                />
+              )}
+            </main>
+
+            {/* Right Actionable Goal & Next-Building Panel */}
+            {showRightPanel && (
+              <RightPanel
                 stars={stars}
-                coins={coins}
-                claimedBuildingIds={claimedBuildingIds}
-                language={language}
-                sfxEnabled={profile.sfxEnabled}
-                onClaimBuildingReward={handleClaimBuildingReward}
-                onAddBonusCoins={(amount) => setCoins((prev) => prev + amount)}
-                onGoToLessons={() => setActiveTab('lessons')}
-              />
-            )}
-
-            {activeTab === 'games' && (
-              <GamesView
-                sfxEnabled={profile.sfxEnabled}
-                onRewardEarned={handleGameRewardEarned}
-              />
-            )}
-
-            {activeTab === 'tournament' && (
-              <TournamentView
-                stars={stars}
+                todayWordsCompleted={todayWordsCompleted}
+                activeNode={activeNode}
                 profile={profile}
                 sfxEnabled={profile.sfxEnabled}
-                onGoToLessons={() => setActiveTab('lessons')}
+                onStartActiveLesson={(node) => setSelectedNode(node)}
+                onOpenCity={() => setActiveTab('city')}
+                onOpenTournament={() => {
+                  setActiveTab('home');
+                  setHomeSubView('tournament');
+                }}
+                onOpenChat={() => setActiveTab('chat')}
               />
             )}
-
-            {activeTab === 'chat' && <KikiChatView sfxEnabled={profile.sfxEnabled} />}
-
-            {activeTab === 'therapist' && (
-              <TherapistDashboardView
-                profile={profile}
-                soundStats={soundStats}
-                weeklyAssessments={weeklyAssessments}
-                sfxEnabled={profile.sfxEnabled}
-                onAssignCustomExercise={handleAssignCustomExercise}
-                onGoToLessons={() => setActiveTab('lessons')}
-              />
-            )}
-
-            {activeTab === 'parent' && (
-              <ParentDashboardView
-                profile={profile}
-                stars={stars}
-                soundStats={soundStats}
-                weeklyAssessments={weeklyAssessments}
-                sessions={sessions}
-              />
-            )}
-
-            {activeTab === 'profile' && (
-              <ProfileView
-                profile={profile}
-                stars={stars}
-                onUpdateProfile={handleUpdateProfile}
-              />
-            )}
-          </main>
-
-          {/* Right Actionable Goal & Next-Building Panel */}
-          {showRightPanel && (
-            <RightPanel
-              stars={stars}
-              todayWordsCompleted={todayWordsCompleted}
-              activeNode={activeNode}
-              profile={profile}
-              sfxEnabled={profile.sfxEnabled}
-              onStartActiveLesson={(node) => setSelectedNode(node)}
-              onOpenCity={() => setActiveTab('city')}
-              onOpenTournament={() => setActiveTab('tournament')}
-              onOpenChat={() => setActiveTab('chat')}
-            />
-          )}
+          </div>
         </div>
-      </div>
 
-      {/* Live AI Speech Practice Modal */}
-      {selectedNode && (
-        <PracticeModal
-          node={selectedNode}
-          sfxEnabled={profile.sfxEnabled}
-          onClose={() => setSelectedNode(null)}
-          onWordSuccess={handleWordSuccess}
-          onLessonComplete={handleLessonComplete}
-        />
-      )}
-    </div>
+        {/* Live AI Speech Practice Modal */}
+        {selectedNode && (
+          <PracticeModal
+            key={selectedNode.id}
+            node={selectedNode}
+            sfxEnabled={profile.sfxEnabled}
+            onClose={() => setSelectedNode(null)}
+            onWordSuccess={handleWordSuccess}
+            onLessonComplete={handleLessonComplete}
+          />
+        )}
+      </div>
+    </KikiVoiceProvider>
   );
 }

@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
+import {
+  getIsUzVoiceSpeaking,
+  subscribeUzVoiceSpeaking,
+} from '../utils/uzVoiceService';
 
 export type KikiMood = 'idle' | 'happy' | 'retry' | 'listening';
+type KikiLiveGesture = 'none' | 'wave' | 'scratch' | 'jump';
 
 interface KikiMascotProps {
   mood?: KikiMood;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  isSpeaking?: boolean;
+  syncWithGlobalVoice?: boolean;
 }
 
 export const KikiLogo: React.FC<{ className?: string; alt?: string }> = ({
@@ -102,212 +109,269 @@ export const KikiMascot: React.FC<KikiMascotProps> = ({
   mood = 'idle',
   size = 'md',
   className = '',
+  isSpeaking = false,
+  syncWithGlobalVoice = true,
 }) => {
-  const [imgFailed, setImgFailed] = useState(false);
+  const uid = useId().replace(/:/g, '');
+  const [globalVoiceSpeaking, setGlobalVoiceSpeaking] = useState<boolean>(() =>
+    getIsUzVoiceSpeaking()
+  );
+  const [liveGesture, setLiveGesture] = useState<KikiLiveGesture>('none');
+
+  useEffect(() => {
+    if (!syncWithGlobalVoice) return;
+    setGlobalVoiceSpeaking(getIsUzVoiceSpeaking());
+    return subscribeUzVoiceSpeaking((speaking) => {
+      setGlobalVoiceSpeaking(speaking);
+    });
+  }, [syncWithGlobalVoice]);
+
+  const effectiveSpeaking = Boolean(
+    isSpeaking || (syncWithGlobalVoice && globalVoiceSpeaking)
+  );
+
+  // Spaced-out occasional living gestures: scratch head -> wave paw -> playful hop
+  // Starts calmly at rest, pauses naturally between actions (~9s apart), and pauses during listening/speaking.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const prefersReduced = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)'
+    )?.matches;
+    if (
+      prefersReduced ||
+      mood === 'listening' ||
+      mood === 'retry' ||
+      effectiveSpeaking
+    ) {
+      setLiveGesture('none');
+      return;
+    }
+
+    const sequence: KikiLiveGesture[] = ['scratch', 'wave', 'jump'];
+    let stepIndex = 0;
+    let activeTimeoutId: number | null = null;
+
+    const triggerGesture = () => {
+      const nextGesture = sequence[stepIndex % sequence.length];
+      stepIndex += 1;
+      setLiveGesture(nextGesture);
+      if (activeTimeoutId !== null) {
+        clearTimeout(activeTimeoutId);
+      }
+      activeTimeoutId = window.setTimeout(
+        () => {
+          setLiveGesture('none');
+        },
+        nextGesture === 'jump' ? 1500 : 2150
+      );
+    };
+
+    // Calm pause at startup before first expressive action, then spaced intervals
+    const staggerMs = (uid.charCodeAt(0) % 5) * 350;
+    const initTimer = window.setTimeout(triggerGesture, 3800 + staggerMs);
+    const intervalId = window.setInterval(triggerGesture, 9200);
+
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(intervalId);
+      if (activeTimeoutId !== null) {
+        clearTimeout(activeTimeoutId);
+      }
+    };
+  }, [mood, effectiveSpeaking, uid]);
 
   const sizeClass =
     size === 'sm'
-      ? 'w-16 h-16'
+      ? 'w-16 h-16 sm:w-20 sm:h-20'
       : size === 'lg'
         ? 'w-36 h-36 sm:w-44 sm:h-44'
         : 'w-28 h-28 sm:w-32 sm:h-32';
 
-  const moodAnimClass =
-    mood === 'happy'
-      ? 'animate-kiki-happy'
+  const bodyAnimClass = effectiveSpeaking
+    ? 'animate-kiki-speak'
+    : liveGesture === 'jump'
+      ? 'animate-kiki-jump-once'
       : mood === 'retry'
         ? 'animate-kiki-retry'
         : mood === 'listening'
           ? 'animate-kiki-listen'
-          : 'animate-kiki-idle';
+          : mood === 'happy'
+            ? 'animate-kiki-happy'
+            : 'animate-kiki-idle';
 
-  if (!imgFailed) {
-    return (
-      <div
-        className={`relative inline-flex items-center justify-center bg-transparent ${className}`}
-      >
-        <img
-          src="/assets/kiki-mascot.png"
-          alt="Kiki — So‘zApp nutq yordamchisi"
-          onError={() => setImgFailed(true)}
-          draggable={false}
-          className={`${sizeClass} ${moodAnimClass} object-contain bg-transparent select-none pointer-events-none`}
+  const isJumpingNow = liveGesture === 'jump';
+  const isWaving = liveGesture === 'wave';
+  const isScratching = liveGesture === 'scratch';
+
+  const leftArmAnimClass = isJumpingNow
+    ? 'kiki-arm-cheer-left'
+    : isWaving
+      ? 'kiki-arm-wave'
+      : 'kiki-arm-left-idle';
+
+  const rightArmAnimClass = isJumpingNow
+    ? 'kiki-arm-cheer-right'
+    : isScratching
+      ? 'kiki-arm-scratch'
+      : 'kiki-arm-right-idle';
+
+  const [spriteFallback, setSpriteFallback] = useState(false);
+
+  const renderLeftArm = () => (
+    <g transform="translate(160, 346)">
+      <g className={`kiki-arm-left ${leftArmAnimClass}`}>
+        <image
+          href="/assets/kiki-arm-left.png"
+          x="-160"
+          y="-346"
+          width="512"
+          height="512"
+          onError={() => setSpriteFallback(true)}
         />
-      </div>
-    );
-  }
+      </g>
+    </g>
+  );
+
+  const renderRightArm = () => (
+    <g transform="translate(356, 346)">
+      <g className={`kiki-arm-right ${rightArmAnimClass}`}>
+        <image
+          href="/assets/kiki-arm-right.png"
+          x="-356"
+          y="-346"
+          width="512"
+          height="512"
+          onError={() => setSpriteFallback(true)}
+        />
+      </g>
+    </g>
+  );
 
   return (
     <div
-      className={`relative inline-flex items-center justify-center bg-transparent ${className}`}
+      className={`relative inline-flex items-center justify-center aspect-square shrink-0 bg-transparent select-none ${sizeClass} ${className}`}
     >
-      {/* Transparent-background full-body Kiki fallback SVG */}
+      {effectiveSpeaking && (
+        <>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -left-1.5 top-1/4 w-3 h-7 rounded-full border-l-[3px] border-[#00BFFF]/85 animate-ping"
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-1.5 top-1/4 w-3 h-7 rounded-full border-r-[3px] border-[#00BFFF]/85 animate-ping"
+          />
+        </>
+      )}
+
+      {/* Exact User Panda Character Rigged with Living Movements */}
       <svg
-        viewBox="0 0 200 212"
-        className={`${sizeClass} ${moodAnimClass} select-none pointer-events-none bg-transparent`}
+        viewBox="52 6 408 498"
+        preserveAspectRatio="xMidYMid meet"
+        className={`w-full h-full select-none pointer-events-none bg-transparent overflow-visible ${bodyAnimClass}`}
         role="img"
         aria-label="Kiki panda qahramoni"
       >
-        {/* Ears */}
-        <circle
-          cx="52"
-          cy="43"
-          r="21.5"
-          fill="#00BFFF"
-          stroke="#0077B6"
-          strokeWidth="5.5"
-          strokeLinejoin="round"
-        />
-        <circle cx="57" cy="46" r="11.5" fill="#0098D6" />
-
-        <circle
-          cx="148"
-          cy="43"
-          r="21.5"
-          fill="#00BFFF"
-          stroke="#0077B6"
-          strokeWidth="5.5"
-          strokeLinejoin="round"
-        />
-        <circle cx="143" cy="46" r="11.5" fill="#0098D6" />
-
-        {/* Left Arm */}
-        <path
-          d="M 65 130 C 49 140, 41 162, 49 170 C 55 176, 65 170, 68 158 Z"
-          fill="#00BFFF"
-          stroke="#0077B6"
-          strokeWidth="5.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Right Arm */}
-        <path
-          d="M 135 130 C 151 140, 159 162, 151 170 C 145 176, 135 170, 132 158 Z"
-          fill="#00BFFF"
-          stroke="#0077B6"
-          strokeWidth="5.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Chubby Body & Legs */}
-        <path
-          d="M 65 128 L 135 128 C 142 146, 142 172, 135 190 C 131 199, 113 200, 108 190 C 106 185, 105 180, 100 180 C 95 180, 94 185, 92 190 C 87 200, 69 199, 65 190 C 58 172, 58 146, 65 128 Z"
-          fill="#00BFFF"
-          stroke="#0077B6"
-          strokeWidth="5.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Subtle Inner Leg & Shoulder Shading */}
-        <path
-          d="M 67 132 Q 100 144 133 132 L 130 140 Q 100 150 70 140 Z"
-          fill="#0098D6"
-          opacity="0.55"
-        />
-
-        {/* White Belly Patch with clean dark sky-blue outline */}
-        <path
-          d="M 67 159 C 67 141, 133 141, 133 159 C 133 176, 118 183, 100 183 C 82 183, 67 176, 67 159 Z"
-          fill="#EAF5FB"
-          stroke="#0077B6"
-          strokeWidth="3.5"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M 70 165 Q 100 182 130 165 Q 123 181 100 181 Q 77 181 70 165 Z"
-          fill="#CFE7F5"
-          opacity="0.75"
-        />
-
-        {/* Round Panda Head */}
-        <path
-          d="M 100 22 C 142 22, 166 50, 166 84 C 166 118, 138 136, 100 136 C 62 136, 34 118, 34 84 C 34 50, 58 22, 100 22 Z"
-          fill="#FFFFFF"
-          stroke="#0077B6"
-          strokeWidth="5.5"
-          strokeLinejoin="round"
-        />
-
-        {/* Subtle Cool Chin Shading */}
-        <path
-          d="M 41 96 Q 100 136 159 96 Q 146 132 100 133 Q 54 132 41 96 Z"
-          fill="#DCEFF8"
-          opacity="0.7"
-        />
-
-        {/* Tilted Sky-Blue Eye Patches with bold outline */}
+        {/* Subtle Ground Shadow */}
         <ellipse
-          cx="68"
-          cy="86"
-          rx="20"
-          ry="24.5"
-          transform="rotate(-14 68 86)"
-          fill="#00BFFF"
-          stroke="#0077B6"
-          strokeWidth="3.2"
-        />
-        <ellipse
-          cx="132"
-          cy="86"
-          rx="20"
-          ry="24.5"
-          transform="rotate(14 132 86)"
-          fill="#00BFFF"
-          stroke="#0077B6"
-          strokeWidth="3.2"
+          cx="256"
+          cy="494"
+          rx={isJumpingNow ? 84 : 104}
+          ry="11"
+          fill="#086488"
+          opacity={isJumpingNow ? 0.08 : 0.14}
         />
 
-        {/* Big Glossy Black Eyes with Two White Catchlights Each */}
-        <circle cx="69" cy="86" r="14.2" fill="#FFFFFF" stroke="#0077B6" strokeWidth="2.8" />
-        <circle cx="131" cy="86" r="14.2" fill="#FFFFFF" stroke="#0077B6" strokeWidth="2.8" />
-        <circle cx="70" cy="86" r="11.4" fill="#090D14" />
-        <circle cx="130" cy="86" r="11.4" fill="#090D14" />
+        {spriteFallback ? (
+          <image
+            href="/assets/kiki-mascot.png"
+            x="0"
+            y="0"
+            width="512"
+            height="512"
+          />
+        ) : (
+          <>
+            {/* Articulated Left & Right Arms (behind body except foreground scratch) */}
+            {renderLeftArm()}
+            {!isScratching && renderRightArm()}
 
-        {/* Two crisp white catchlights per eye */}
-        <circle cx="65.8" cy="81.8" r="3.7" fill="#FFFFFF" />
-        <circle cx="125.8" cy="81.8" r="3.7" fill="#FFFFFF" />
-        <circle cx="74.6" cy="90.4" r="1.9" fill="#FFFFFF" />
-        <circle cx="134.6" cy="90.4" r="1.9" fill="#FFFFFF" />
+            {/* Exact User Panda Body + Head Layer with Living Face Overlays */}
+            <g
+              className={`kiki-head-group ${
+                isScratching ? 'kiki-head-scratch' : 'kiki-part-torso'
+              }`}
+            >
+              <image
+                href="/assets/kiki-body-noarms.png"
+                x="0"
+                y="0"
+                width="512"
+                height="512"
+                onError={() => setSpriteFallback(true)}
+              />
 
-        {/* Small Dark Nose with Soft Top Highlight */}
-        <ellipse
-          cx="100"
-          cy="101.5"
-          rx="7.6"
-          ry="4.8"
-          fill="#090D14"
-          stroke="#0077B6"
-          strokeWidth="1.8"
-        />
-        <ellipse cx="100" cy="99.7" rx="4.2" ry="1.5" fill="#38BDF8" opacity="0.5" />
+              {/* Frequent Smooth Eye Blink Cover (stays strictly inside blue eye patches) */}
+              <g className="kiki-closed-lid" aria-hidden="true">
+                <ellipse cx="179.5" cy="193" rx="50" ry="49" fill="#05BEFC" />
+                <path
+                  d="M 142 195 Q 179.5 220 217 195"
+                  fill="none"
+                  stroke="#086488"
+                  strokeWidth="9"
+                  strokeLinecap="round"
+                />
+                <ellipse cx="335.5" cy="193" rx="50" ry="49" fill="#05BEFC" />
+                <path
+                  d="M 298 195 Q 335.5 220 373 195"
+                  fill="none"
+                  stroke="#086488"
+                  strokeWidth="9"
+                  strokeLinecap="round"
+                />
+              </g>
 
-        {/* Cute w-shaped Smile */}
-        <line
-          x1="100"
-          y1="106"
-          x2="100"
-          y2="112"
-          stroke="#0077B6"
-          strokeWidth="4.2"
-          strokeLinecap="round"
-        />
-        <path
-          d={
-            mood === 'happy'
-              ? 'M 87 110.5 Q 93.5 120 100 112 Q 106.5 120 113 110.5'
-              : mood === 'retry'
-                ? 'M 89 112 Q 94.5 115 100 112 Q 105.5 115 111 112'
-                : 'M 88 110.5 Q 94 118 100 112 Q 106 118 112 110.5'
-          }
-          fill="none"
-          stroke="#0077B6"
-          strokeWidth="4.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+              {/* Audio-Synced Mouth Animation (active only while voice/audio plays; otherwise exact resting smile shows) */}
+              {effectiveSpeaking && (
+                <g aria-hidden="true">
+                  <rect
+                    x="219"
+                    y="246"
+                    width="77"
+                    height="30"
+                    rx="14"
+                    fill="#FFFFFF"
+                  />
+                  <line
+                    x1="257.5"
+                    y1="246"
+                    x2="257.5"
+                    y2="253"
+                    stroke="#086488"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                  />
+                  <g className="kiki-mouth-speaking">
+                    <path
+                      d="M 230 253 Q 257.5 250 285 253 C 285 277, 274 285, 257.5 285 C 241 285, 230 277, 230 253 Z"
+                      fill="#083A5C"
+                      stroke="#086488"
+                      strokeWidth="5.5"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M 240 272 Q 257.5 262 275 272 Q 267 283 257.5 283 Q 248 283 240 272 Z"
+                      fill="#FB7185"
+                    />
+                  </g>
+                </g>
+              )}
+            </g>
+
+            {/* Foreground Right Arm When Scratching Head */}
+            {isScratching && renderRightArm()}
+          </>
+        )}
       </svg>
     </div>
   );

@@ -11,13 +11,16 @@ import {
   X,
 } from 'lucide-react';
 import { CITY_BUILDINGS } from '../data/lessonsData';
-import { CityBuilding, Language } from '../types';
+import { getPersonalizedPracticeWordsForLetters } from '../data/diagnosticData';
+import { CityBuilding, DiagnosticReport, Language } from '../types';
 import { KikiMascot } from './KikiMascot';
+import { useKikiVoice } from '../context/KikiVoiceContext';
 import {
   playButtonPop,
   playRetryTone,
   playSuccessChime,
   speakWord,
+  unlockKikiAudio,
 } from '../utils/soundEffects';
 
 interface WordCityViewProps {
@@ -26,9 +29,11 @@ interface WordCityViewProps {
   claimedBuildingIds: string[];
   language: Language;
   sfxEnabled: boolean;
+  diagnosticReport?: DiagnosticReport | null;
   onClaimBuildingReward: (building: CityBuilding) => void;
   onAddBonusCoins: (amount: number) => void;
   onGoToLessons: () => void;
+  onOpenDiagnostic?: () => void;
 }
 
 const MAP_OFFSETS = [0, -56, -72, 0, 68, 54, 0, -60, 48, 0];
@@ -163,14 +168,24 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
   claimedBuildingIds,
   language,
   sfxEnabled,
+  diagnosticReport,
   onClaimBuildingReward,
   onAddBonusCoins,
   onGoToLessons,
+  onOpenDiagnostic,
 }) => {
+  const { voiceStyle } = useKikiVoice();
   const [selectedBuilding, setSelectedBuilding] = useState<CityBuilding | null>(null);
   const [rewardBanner, setRewardBanner] = useState<string | null>(null);
   const [quizSelection, setQuizSelection] = useState<number | null>(null);
   const [quizSolvedIds, setQuizSolvedIds] = useState<string[]>([]);
+  const [speakingCardWord, setSpeakingCardWord] = useState<string | null>(null);
+
+  const personalizedWords = diagnosticReport
+    ? getPersonalizedPracticeWordsForLetters(
+        diagnosticReport.recommendedCityFocusLetters
+      )
+    : [];
 
   const unlockedCount = CITY_BUILDINGS.filter((b) => stars >= b.unlockStars).length;
   const maxCityStars = CITY_BUILDINGS[CITY_BUILDINGS.length - 1]?.unlockStars || 560;
@@ -228,7 +243,7 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
             <KikiMascot
               mood="happy"
               size="sm"
-              className="!w-16 !h-16"
+              className="!w-20 !h-20 shrink-0"
             />
             <div className="bg-white/20 border-2 border-white/35 rounded-2xl px-4 py-2.5">
               <div className="text-[11px] font-bold text-white/95">
@@ -245,6 +260,99 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Personalized Diagnostic Recommendation Section */}
+      {diagnosticReport && personalizedWords.length > 0 ? (
+        <section className="bg-emerald-50/80 dark:bg-emerald-950/35 border-2 border-[#58CC02] rounded-3xl p-4 sm:p-5 space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#3B8700] dark:text-[#7CE82B]">
+                <Sparkles className="w-4 h-4" />
+                <span>SHAXSIY TAVSIYA · DIAGNOSTIKA NATIJASI ASOSIDA</span>
+              </div>
+              <h2 className="font-display font-bold text-lg sm:text-xl text-slate-900 dark:text-white mt-0.5">
+                Eng zaif harflardan boshlang:{' '}
+                <span className="text-[#008ECC] dark:text-[#38BDF8]">
+                  {diagnosticReport.recommendedCityFocusLetters.join(', ')}
+                </span>
+              </h2>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5">
+                Kiki ovozida tinglab, ushbu shaxsiy so‘zlarni takrorlang:
+              </p>
+            </div>
+            {onOpenDiagnostic && (
+              <button
+                type="button"
+                onClick={() => {
+                  playButtonPop(!sfxEnabled);
+                  onOpenDiagnostic();
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#58CC02] text-[#3B8700] dark:text-[#7CE82B] text-xs font-extrabold whitespace-nowrap self-start"
+              >
+                Hisobotni ko‘rish ({diagnosticReport.overallScore}%)
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {personalizedWords.slice(0, 6).map((item) => (
+              <button
+                key={`${item.letter}-${item.word}`}
+                type="button"
+                onClick={() => {
+                  unlockKikiAudio();
+                  playButtonPop(!sfxEnabled);
+                  speakWord(
+                    item.word,
+                    'uz-UZ',
+                    () => setSpeakingCardWord(item.word),
+                    () => setSpeakingCardWord(null),
+                    voiceStyle
+                  );
+                }}
+                className="btn-3d bg-white dark:bg-slate-900 hover:bg-[#E5F8FF] dark:hover:bg-slate-800 border-2 border-[#58CC02]/40 border-b-[4px] border-b-[#46A302] rounded-2xl p-3 flex items-center justify-between gap-3 text-left"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-2xl shrink-0">{item.emoji}</span>
+                  <div className="min-w-0">
+                    <div className="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white leading-tight break-words">
+                      {item.word}{' '}
+                      <span className="text-xs font-extrabold text-[#008ECC] dark:text-[#38BDF8]">
+                        · «{item.letter}»
+                      </span>
+                    </div>
+                    <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                      {item.syllables}
+                    </div>
+                  </div>
+                </div>
+                <Volume2
+                  className={`w-5 h-5 text-[#46A302] dark:text-[#7CE82B] shrink-0 ${
+                    speakingCardWord === item.word ? 'animate-pulse' : ''
+                  }`}
+                />
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : onOpenDiagnostic ? (
+        <section className="bg-[#E5F8FF]/70 dark:bg-[#00BFFF]/15 border-2 border-[#00BFFF]/50 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200">
+            💡 Avval <strong>«Birinchi imtihon»</strong> (25 so‘z) ni topshirsangiz,
+            Kiki sizga eng zaif harflaringiz bo‘yicha shaxsiy mashqlar ochib beradi!
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              playButtonPop(!sfxEnabled);
+              onOpenDiagnostic();
+            }}
+            className="btn-3d px-4 py-2 rounded-xl bg-[#00BFFF] border-[#008ECC] text-white font-display font-bold text-xs whitespace-nowrap shrink-0"
+          >
+            Imtihonga o‘tish
+          </button>
+        </section>
+      ) : null}
 
       {/* Celebration Toast when +20 coins awarded */}
       {rewardBanner && (
@@ -500,19 +608,19 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
       {/* Interactive Building Detail & Mini-Activity Modal */}
       {selectedBuilding && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
           role="dialog"
           aria-modal="true"
           aria-label={selectedBuilding.name}
         >
-          <div className="bg-white border-2 border-[#E5E5E5] rounded-3xl max-w-lg w-full p-6 relative shadow-xl my-auto">
+          <div className="bg-white dark:bg-slate-900 border-2 border-[#E5E5E5] dark:border-slate-700 rounded-3xl max-w-lg w-full p-6 relative shadow-xl my-auto">
             <button
               type="button"
               onClick={() => {
                 playButtonPop(!sfxEnabled);
                 setSelectedBuilding(null);
               }}
-              className="absolute top-4 right-4 min-w-[40px] min-h-[40px] rounded-xl border-2 border-[#E5E5E5] flex items-center justify-center text-slate-500 hover:bg-slate-50"
+              className="absolute top-4 right-4 min-w-[40px] min-h-[40px] rounded-xl border-2 border-[#E5E5E5] dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               aria-label="Yopish"
             >
               <X className="w-4 h-4" />
@@ -524,13 +632,13 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
                 unlocked={stars >= selectedBuilding.unlockStars}
               />
               <div>
-                <div className="text-xs font-extrabold text-[#008ECC]">
+                <div className="text-xs font-extrabold text-[#008ECC] dark:text-[#38BDF8]">
                   {selectedBuilding.soundFocus}
                 </div>
-                <h3 className="font-display font-bold text-xl text-slate-900">
+                <h3 className="font-display font-bold text-xl text-slate-900 dark:text-white">
                   {selectedBuilding.order}. {selectedBuilding.name}
                 </h3>
-                <p className="text-xs sm:text-sm font-semibold text-slate-600 mt-0.5">
+                <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 mt-0.5">
                   {selectedBuilding.description}
                 </p>
               </div>
@@ -539,44 +647,53 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
             {stars >= selectedBuilding.unlockStars ? (
               <div className="space-y-4">
                 {/* Coin Status Banner */}
-                <div className="bg-amber-50 border border-[#FFC800] rounded-2xl px-4 py-2.5 flex items-center justify-between text-xs font-bold text-amber-900">
+                <div className="bg-amber-50 dark:bg-amber-950/40 border border-[#FFC800] rounded-2xl px-4 py-2.5 flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200">
                   <span className="flex items-center gap-1.5">
                     <Coins className="w-4 h-4 text-[#F59E0B]" />
                     <span>Bino mukofoti (+20 tanga) qo‘shildi!</span>
                   </span>
-                  <span className="text-[#46A302] font-extrabold">✓ Olingan</span>
+                  <span className="text-[#46A302] dark:text-[#7CE82B] font-extrabold">
+                    ✓ Olingan
+                  </span>
                 </div>
 
                 {/* Story Card */}
-                <div className="bg-[#E5F8FF]/70 border border-[#00BFFF]/40 rounded-2xl p-3.5">
+                <div className="bg-[#E5F8FF]/70 dark:bg-[#00BFFF]/15 border border-[#00BFFF]/40 rounded-2xl p-3.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-xs font-extrabold text-[#008ECC] flex items-center gap-1.5">
+                    <span className="text-xs font-extrabold text-[#008ECC] dark:text-[#38BDF8] flex items-center gap-1.5">
                       <BookOpen className="w-3.5 h-3.5" />
                       <span>Kiki hikoyasi</span>
                     </span>
                     <button
                       type="button"
                       onClick={() => {
+                        unlockKikiAudio();
                         playButtonPop(!sfxEnabled);
-                        speakWord(selectedBuilding.storyLine, 'uz-UZ');
+                        speakWord(
+                          selectedBuilding.storyLine,
+                          'uz-UZ',
+                          undefined,
+                          undefined,
+                          voiceStyle
+                        );
                       }}
-                      className="text-xs font-bold text-[#008ECC] hover:underline flex items-center gap-1"
+                      className="text-xs font-bold text-[#008ECC] dark:text-[#38BDF8] hover:underline flex items-center gap-1"
                     >
                       <Volume2 className="w-3.5 h-3.5" />
                       <span>Tinglash</span>
                     </button>
                   </div>
-                  <p className="text-xs sm:text-sm font-semibold text-slate-700 leading-relaxed">
+                  <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 leading-relaxed">
                     {selectedBuilding.storyLine}
                   </p>
                 </div>
 
                 {/* Interactive Mini-Challenge */}
-                <div className="bg-emerald-50/70 border-2 border-[#58CC02]/40 rounded-2xl p-4 space-y-2.5">
-                  <div className="text-xs font-extrabold text-[#3B8700]">
+                <div className="bg-emerald-50/70 dark:bg-emerald-950/35 border-2 border-[#58CC02]/40 rounded-2xl p-4 space-y-2.5">
+                  <div className="text-xs font-extrabold text-[#3B8700] dark:text-[#7CE82B]">
                     Bino ichidagi mini-topshiriq (+10 tanga):
                   </div>
-                  <p className="text-sm font-bold text-slate-900">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
                     {selectedBuilding.miniQuiz.question}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -584,7 +701,7 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
                       const isSelected = quizSelection === idx;
                       const isCorrect = idx === selectedBuilding.miniQuiz.correctIndex;
                       let btnStyle =
-                        'bg-white border-2 border-[#E5E5E5] text-slate-800 hover:border-[#00BFFF]';
+                        'bg-white dark:bg-slate-800 border-2 border-[#E5E5E5] dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:border-[#00BFFF]';
                       if (isSelected) {
                         btnStyle = isCorrect
                           ? 'bg-[#58CC02] border-[#46A302] text-white'
@@ -606,8 +723,8 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
                     <p
                       className={`text-xs font-bold flex items-center gap-1.5 ${
                         quizSelection === selectedBuilding.miniQuiz.correctIndex
-                          ? 'text-[#3B8700]'
-                          : 'text-[#C81E1E]'
+                          ? 'text-[#3B8700] dark:text-[#7CE82B]'
+                          : 'text-[#C81E1E] dark:text-rose-400'
                       }`}
                     >
                       <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -622,7 +739,7 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
 
                 {/* Pronunciation Cards */}
                 <div className="space-y-2">
-                  <div className="text-xs font-extrabold text-slate-500">
+                  <div className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
                     Tezkor tinglash va takrorlash kartochkalari:
                   </div>
                   {selectedBuilding.practiceCards.map((card) => (
@@ -630,6 +747,7 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
                       key={card.word}
                       type="button"
                       onClick={() => {
+                        unlockKikiAudio();
                         playButtonPop(!sfxEnabled);
                         speakWord(
                           card.word,
@@ -637,30 +755,33 @@ export const WordCityView: React.FC<WordCityViewProps> = ({
                             ? 'ru-RU'
                             : language === 'ru'
                               ? 'ru-RU'
-                              : 'uz-UZ'
+                              : 'uz-UZ',
+                          undefined,
+                          undefined,
+                          voiceStyle
                         );
                       }}
-                      className="btn-3d w-full bg-[#E5F8FF]/70 hover:bg-[#E5F8FF] border-2 border-[#00BFFF]/50 border-b-[4px] border-b-[#008ECC] rounded-2xl p-3 flex items-center justify-between text-left"
+                      className="btn-3d w-full bg-[#E5F8FF]/70 dark:bg-slate-800 hover:bg-[#E5F8FF] dark:hover:bg-slate-700 border-2 border-[#00BFFF]/50 border-b-[4px] border-b-[#008ECC] rounded-2xl p-3 flex items-center justify-between text-left"
                     >
                       <div>
-                        <div className="font-display font-bold text-base text-slate-900">
+                        <div className="font-display font-bold text-base text-slate-900 dark:text-white">
                           {card.word}{' '}
-                          <span className="text-xs font-extrabold text-[#008ECC] ml-1.5">
+                          <span className="text-xs font-extrabold text-[#008ECC] dark:text-[#38BDF8] ml-1.5">
                             ({card.syllables})
                           </span>
                         </div>
-                        <div className="text-xs font-semibold text-slate-600 mt-0.5">
+                        <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-0.5">
                           {card.tip}
                         </div>
                       </div>
-                      <Volume2 className="w-5 h-5 text-[#008ECC] shrink-0" />
+                      <Volume2 className="w-5 h-5 text-[#008ECC] dark:text-[#38BDF8] shrink-0" />
                     </button>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="bg-amber-50 border-2 border-[#FFC800]/60 rounded-2xl p-4 text-center space-y-3">
-                <p className="text-sm font-bold text-amber-900">
+              <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-[#FFC800]/60 rounded-2xl p-4 text-center space-y-3">
+                <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
                   Ushbu binoni ochish va <strong>+20 tanga</strong> olish uchun yana{' '}
                   <span className="tabular-nums font-extrabold">
                     {selectedBuilding.unlockStars - stars} ⭐
